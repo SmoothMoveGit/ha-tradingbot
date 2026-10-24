@@ -58,7 +58,7 @@ def run_backtest(cfg, bars: dict[str, list[Bar]], start: date | None = None, end
 
     bot_logger = logging.getLogger("tradingbot.bot")
     level = bot_logger.level
-    bot_logger.setLevel(logging.WARNING)
+    bot_logger.setLevel(logging.CRITICAL)  # Not-Aus steht in der Zusammenfassung, nicht jeden Tag im Protokoll
     deposit = cfg.risk.monthly_deposit
     paid, units, peak, max_dd, month = budget, 0.0, 1.0, 0.0, None
     try:
