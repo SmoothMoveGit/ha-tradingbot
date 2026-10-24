@@ -1,0 +1,22 @@
+configuration:
+  alpaca_api_key:
+    name: Alpaca API Key ID
+    description: Aus dem Alpaca-Dashboard (Paper Trading -> API Keys).
+  alpaca_secret_key:
+    name: Alpaca Secret Key
+    description: Wird bei Alpaca nur einmal angezeigt.
+  mode:
+    name: Modus
+    description: "paper = Spielgeld (empfohlen), sim = offline mit Zufallskursen, live = ECHTES GELD."
+  start_budget:
+    name: Startbudget (USD)
+    description: So viel Geld darf der Bot einsetzen. Gewinne kommen dazu, Verluste gehen ab.
+  notify_service:
+    name: Benachrichtigungsdienst
+    description: "z.B. notify.mobile_app_dein_handy. Leer = Benachrichtigung in Home Assistant."
+  anthropic_api_key:
+    name: Anthropic API Key (optional)
+    description: Bessere Nachrichtenbewertung mit Claude. Leer = lokale Bewertung.
+  live_confirmation:
+    name: Bestätigung Live-Handel
+    description: "Nur für Modus live: exakt ja-ich-kenne-das-risiko eintragen."

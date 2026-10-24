@@ -1,0 +1,55 @@
+# Kopiere diese Datei nach config.yaml und passe sie an.
+# Modus: "paper" (Spielgeld bei Alpaca), "sim" (offline) oder "live" (ECHTES GELD, siehe README)
+mode: paper
+interval_minutes: 15
+db_path: data/tradingbot.db
+
+# Aktien, die der Bot handeln darf (US-Ticker bei Alpaca)
+watchlist: [AAPL, MSFT, NVDA, AMZN, GOOGL, META, JPM, V, KO, JNJ]
+
+# Firmennamen, damit RSS-Nachrichten den Aktien zugeordnet werden
+aliases:
+  AAPL: [Apple, iPhone]
+  MSFT: [Microsoft]
+  NVDA: [Nvidia]
+  AMZN: [Amazon]
+  GOOGL: [Google, Alphabet]
+  META: [Meta, Facebook, Instagram]
+  JPM: [JPMorgan]
+  V: [Visa]
+  KO: [Coca-Cola]
+  JNJ: [Johnson & Johnson]
+
+risk:
+  start_budget: 300           # Guthaben des Bots in USD (≈ 250–280 €)
+  reinvest_profits: true      # Gewinne dürfen wieder eingesetzt werden
+  max_position_pct: 0.20      # max. 20 % des Kapitals pro Aktie
+  max_positions: 4
+  min_cash_reserve_pct: 0.10
+  stop_loss_pct: 0.05
+  take_profit_pct: 0.12
+  trailing_stop_pct: 0.06
+  daily_loss_limit_pct: 0.03  # ab -3 % am Tag keine neuen Käufe
+  max_drawdown_pct: 0.25      # ab -25 % vom Höchststand: alles verkaufen, Bot stoppt
+  rebuy_cooldown_days: 2
+
+strategy:
+  sma_fast: 10
+  sma_slow: 30
+  trend_weight: 0.6
+  news_weight: 0.4
+  market_news_weight: 0.3
+  buy_threshold: 0.35
+  sell_threshold: -0.25
+  panic_news_threshold: -0.6
+  news_lookback_hours: 24
+  news_half_life_hours: 6
+
+news:
+  use_alpaca_news: true
+  sentiment_engine: lexicon   # "claude" für bessere Bewertung (braucht ANTHROPIC_API_KEY, kostet wenige Cent/Tag)
+  rss_feeds:
+    - https://feeds.a.dj.com/rss/RSSMarketsMain.xml
+    - https://www.cnbc.com/id/100003114/device/rss/rss.html
+    - https://www.tagesschau.de/wirtschaft/index~rss2.xml
+    - https://feeds.bbci.co.uk/news/world/rss.xml

@@ -1,0 +1,15 @@
+[Unit]
+Description=Aktien-Tradingbot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/tradingbot
+ExecStart=/home/pi/tradingbot/.venv/bin/python -m tradingbot run
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target

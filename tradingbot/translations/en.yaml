@@ -1,0 +1,18 @@
+configuration:
+  alpaca_api_key:
+    name: Alpaca API Key ID
+  alpaca_secret_key:
+    name: Alpaca Secret Key
+  mode:
+    name: Mode
+    description: "paper = simulated money (recommended), sim = offline, live = REAL MONEY."
+  start_budget:
+    name: Start budget (USD)
+  notify_service:
+    name: Notify service
+    description: "e.g. notify.mobile_app_phone. Empty = persistent notification."
+  anthropic_api_key:
+    name: Anthropic API key (optional)
+  live_confirmation:
+    name: Live trading confirmation
+    description: "Live mode only: enter exactly ja-ich-kenne-das-risiko."

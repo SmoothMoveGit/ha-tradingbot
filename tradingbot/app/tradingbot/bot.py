@@ -1,0 +1,170 @@
+"""Hauptlogik: ein Handelszyklus und die Endlosschleife."""
+from __future__ import annotations
+
+import logging
+import time
+from datetime import date
+
+from .homeassistant import Reporter
+from .news import MARKET, NewsAnalyzer
+from .risk import RiskManager
+from .storage import Storage
+from .strategy import combine, trend_score
+
+log = logging.getLogger(__name__)
+
+
+class TradingBot:
+    def __init__(self, cfg, broker, storage: Storage | None = None, reporter: Reporter | None = None):
+        self.cfg = cfg
+        self.reporter = reporter or Reporter()
+        self.status = "gestartet"
+        self.broker = broker
+        self.storage = storage or Storage(cfg.db_path)
+        self.risk = RiskManager(cfg, self.storage)
+        self.news = NewsAnalyzer(cfg, self.storage, broker)
+
+    def _own_positions(self):
+        """Nur Positionen, die der Bot selbst eröffnet hat (manuelle Käufe bleiben unberührt)."""
+        held = self.broker.positions()
+        meta = self.storage.all_meta()
+        for sym in list(meta):
+            if sym not in held:
+                log.warning("%s nicht mehr im Depot (extern verkauft?), entferne aus Verwaltung", sym)
+                self.storage.close_meta(sym)
+                meta.pop(sym)
+        return {s: held[s] for s in meta}, meta
+
+    def _sell(self, symbol: str, reason: str, meta: dict, today: date) -> None:
+        fill = self.broker.sell_all(symbol)
+        if not fill:
+            return
+        pnl = fill.qty * fill.price - meta.get(symbol, 0.0)
+        self.storage.record_trade(symbol, "sell", fill.qty, fill.price, reason, pnl)
+        self.storage.close_meta(symbol)
+        self.storage.set(f"sold:{symbol}", today.isoformat())
+        meta.pop(symbol, None)
+        log.info("VERKAUF %s %.4f @ %.2f | %s | G/V %+.2f", symbol, fill.qty, fill.price, reason, pnl)
+        self.reporter.notify(f"Tradingbot: {symbol} verkauft", f"{reason}, Gewinn/Verlust {pnl:+.2f} $")
+
+    def in_cooldown(self, symbol: str, today: date) -> bool:
+        sold = self.storage.get(f"sold:{symbol}")
+        return bool(sold) and (today - date.fromisoformat(sold)).days < self.cfg.risk.rebuy_cooldown_days
+
+    def run_cycle(self, today: date | None = None) -> None:
+        try:
+            self._cycle(today or date.today())
+        finally:
+            self._publish()
+
+    def _publish(self) -> None:
+        try:
+            positions, meta = self._own_positions()
+            capital = self.risk.bot_capital()
+            last = self.storage.recent_trades(1)
+            self.reporter.publish({
+                "value": capital - sum(meta.values()) + sum(p.market_value for p in positions.values()),
+                "capital": capital,
+                "realized_pnl": self.storage.realized_pnl(),
+                "positions": sorted(meta),
+                "status": self.status,
+                "mode": self.cfg.mode,
+                "halted": self.risk.halted,
+                "last_trade": f"{last[0][2]} {last[0][1]} ({last[0][0][:16]})" if last else None,
+            })
+        except Exception:
+            log.exception("Status konnte nicht gemeldet werden")
+
+    def _cycle(self, today: date) -> None:
+        if self.risk.halted:
+            self.status = "Not-Aus"
+            log.error("Bot ist per Not-Aus angehalten (max. Drawdown). 'python -m tradingbot reset-halt' zum Fortsetzen.")
+            return
+        try:
+            self.news.refresh()
+        except Exception:
+            log.exception("Nachrichtenabruf fehlgeschlagen")
+        if not self.broker.market_open():
+            self.status = "Börse geschlossen"
+            log.info("Börse geschlossen, nur Nachrichten aktualisiert.")
+            return
+
+        positions, meta = self._own_positions()
+        capital = self.risk.bot_capital()
+        bot_value = capital - sum(meta.values()) + sum(p.market_value for p in positions.values())
+        limit = self.risk.check_limits(bot_value, today)
+        if limit == "stop":
+            self.status = "Not-Aus"
+            log.error("Max. Drawdown erreicht: verkaufe alles und halte an.")
+            self.reporter.notify("Tradingbot: NOT-AUS", "Maximaler Verlust erreicht, alle Positionen werden verkauft.")
+            for sym in list(positions):
+                self._sell(sym, "Not-Aus Drawdown", meta, today)
+            return
+
+        market = self.news.score(MARKET)
+        st = self.cfg.strategy
+        signals = {}
+        for sym in self.cfg.watchlist:
+            try:
+                bars = self.broker.daily_bars(sym, st.sma_slow + 5)
+            except Exception:
+                log.exception("Kursdaten für %s fehlen", sym)
+                continue
+            signals[sym] = combine(sym, trend_score(bars, st.sma_fast, st.sma_slow), self.news.score(sym), market, self.cfg)
+
+        # 1) Verkäufe
+        for sym, pos in positions.items():
+            high = self.storage.update_high(sym, pos.current_price)
+            reason = self.risk.exit_reason(pos.pnl_pct, pos.current_price, high)
+            if not reason and self.news.latest_shock(sym) <= st.panic_news_threshold:
+                reason = "sehr negative Nachricht"
+            sig = signals.get(sym)
+            if not reason and sig and sig.score <= st.sell_threshold:
+                reason = f"Signal negativ ({sig.score:+.2f})"
+            if reason:
+                self._sell(sym, reason, meta, today)
+
+        # 2) Käufe
+        self.status = "Tageslimit erreicht" if limit == "day" else "handelt"
+        if limit == "day":
+            log.warning("Tagesverlust-Limit erreicht: heute keine neuen Käufe.")
+        else:
+            candidates = sorted(
+                (
+                    s for s in signals.values()
+                    if s.score >= st.buy_threshold and s.symbol not in meta and not self.in_cooldown(s.symbol, today)
+                ),
+                key=lambda s: s.score, reverse=True,
+            )
+            for sig in candidates:
+                if len(meta) >= self.cfg.risk.max_positions:
+                    break
+                if self.news.latest_shock(sig.symbol) <= st.panic_news_threshold:
+                    continue
+                amount = self.risk.position_size(sum(meta.values()), self.broker.account().cash)
+                if not amount:
+                    break
+                fill = self.broker.buy_notional(sig.symbol, amount)
+                if not fill:
+                    continue
+                cost = fill.qty * fill.price
+                self.storage.open_meta(sig.symbol, cost, fill.price)
+                meta[sig.symbol] = self.storage.all_meta()[sig.symbol]
+                reason = f"Trend {sig.trend:+.2f}, News {sig.news:+.2f}, Markt {sig.market:+.2f}"
+                self.storage.record_trade(sig.symbol, "buy", fill.qty, fill.price, reason)
+                log.info("KAUF %s %.4f @ %.2f (%.2f) | %s", sig.symbol, fill.qty, fill.price, cost, reason)
+                self.reporter.notify(f"Tradingbot: {sig.symbol} gekauft", f"{cost:.2f} $ zu {fill.price:.2f} $ ({reason})")
+
+        positions, meta = self._own_positions()
+        value = self.risk.bot_capital() - sum(meta.values()) + sum(p.market_value for p in positions.values())
+        self.storage.record_equity(value, self.risk.bot_capital(), self.broker.account().equity)
+        log.info("Bot-Wert %.2f | Kapital %.2f | Positionen: %s", value, self.risk.bot_capital(), ", ".join(meta) or "keine")
+
+    def run_forever(self) -> None:
+        log.info("Tradingbot gestartet im Modus '%s', Intervall %d min", self.cfg.mode, self.cfg.interval_minutes)
+        while True:
+            try:
+                self.run_cycle()
+            except Exception:
+                log.exception("Fehler im Handelszyklus, versuche es im nächsten Intervall erneut")
+            time.sleep(self.cfg.interval_minutes * 60)
