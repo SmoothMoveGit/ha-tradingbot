@@ -193,14 +193,14 @@ def test_backtest_on_history():
     bars = {
         "UP": series(lambda i: 100 * math.exp(0.004 * i)),
         "DOWN": series(lambda i: 100 * math.exp(-0.004 * i)),
-        "SPY": series(lambda i: 400 * math.exp(0.001 * i)),
+        "URTH": series(lambda i: 400 * math.exp(0.001 * i)),
     }
     cfg = Config(watchlist=["UP", "DOWN"])
     cfg.risk.start_budget = 300
     r = run_backtest(cfg, bars)
     assert r["final"] > 300 and r["trades"] >= 1 and r["max_drawdown_pct"] < 0.1
     assert abs(r["benchmark_return_pct"] - (math.exp(0.001 * (299 - 35)) - 1)) < 1e-6
-    assert "Vergleich SPY" in format_result(r)[-1]
+    assert "Vergleich URTH" in format_result(r)[-1]
 
 
 def test_historical_broker_has_no_lookahead():
@@ -214,14 +214,14 @@ def test_historical_broker_has_no_lookahead():
 
 
 def test_benchmark_and_broker_stop():
-    bot, broker = make_bot(symbols=("AAA", "SPY"))
+    bot, broker = make_bot(symbols=("AAA", "URTH"))
     stops = []
     broker.ensure_stop = lambda sym, qty, price: stops.append((sym, round(price, 2)))
     bot.reporter = FakeReporter()
     bot.run_cycle()
     s = bot.reporter.published[-1]
     assert s["benchmark_value"] == pytest.approx(bot.cfg.risk.start_budget)
-    assert stops and stops[0][0] in ("AAA", "SPY")
+    assert stops and stops[0][0] in ("AAA", "URTH")
     entry = broker.holdings[stops[0][0]][1]
     assert stops[0][1] == round(entry * (1 - bot.cfg.risk.stop_loss_pct), 2)
 
@@ -245,7 +245,7 @@ def test_variants_compare_two_periods():
     from tradingbot.broker.base import Bar
     t0 = datetime(2023, 1, 2, tzinfo=timezone.utc)
     bars = {s: [Bar(t0 + timedelta(days=i), p, p, p, p, 1) for i in range(700)
-                for p in [100 * math.exp(k * i)]] for s, k in (("UP", 0.002), ("SPY", 0.001))}
+                for p in [100 * math.exp(k * i)]] for s, k in (("UP", 0.002), ("URTH", 0.001))}
     cfg = Config(watchlist=["UP"])
     res = run_variants(cfg, bars, date(2023, 10, 1), date(2024, 6, 1), date(2024, 12, 1))
     assert [r["name"] for r in res] == [n for n, _ in VARIANTS] + [n for n, _, _ in LEVERAGED]

@@ -54,8 +54,8 @@ class HomeAssistantReporter(Reporter):
         self._state("sensor.tradingbot_gewinn", round(s["realized_pnl"], 2),
                     friendly_name="Tradingbot realisierter Gewinn", icon="mdi:cash-plus", **money)
         if s.get("benchmark_value") is not None:
-            self._state("sensor.tradingbot_vergleich_sp500", round(s["benchmark_value"], 2),
-                        friendly_name="Tradingbot Vergleich S&P 500", icon="mdi:scale-balance",
+            self._state("sensor.tradingbot_vergleich_etf", round(s["benchmark_value"], 2),
+                        friendly_name=f"Tradingbot Vergleich {s.get('benchmark') or 'ETF'}", icon="mdi:scale-balance",
                         vorsprung=round(s["value"] - s["benchmark_value"], 2), **money)
         self._state("sensor.tradingbot_positionen", len(s["positions"]), friendly_name="Tradingbot Positionen",
                     icon="mdi:briefcase", aktien=s["positions"])

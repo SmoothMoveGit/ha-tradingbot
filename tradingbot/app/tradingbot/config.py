@@ -56,7 +56,7 @@ class Config:
     watchlist: list[str] = field(default_factory=lambda: ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL"])
     aliases: dict[str, list[str]] = field(default_factory=dict)
     db_path: str = "data/tradingbot.db"
-    benchmark: str = "SPY"                # Vergleich: einfach einen S&P-500-ETF halten
+    benchmark: str = "URTH"               # Vergleich: einfach einen MSCI-World-ETF halten
     risk: RiskConfig = field(default_factory=RiskConfig)
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
     news: NewsConfig = field(default_factory=NewsConfig)

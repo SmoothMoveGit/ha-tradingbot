@@ -14,6 +14,8 @@ from .strategy import combine, trend_score
 log = logging.getLogger(__name__)
 
 
+BENCHMARK_NAMES = {"URTH": "MSCI World", "SPY": "S&P 500"}
+
 class TradingBot:
     def __init__(self, cfg, broker, storage: Storage | None = None, reporter: Reporter | None = None):
         self.cfg = cfg
@@ -86,6 +88,7 @@ class TradingBot:
             bench = self._benchmark_value()
             self.reporter.publish({
                 "benchmark_value": bench,
+                "benchmark": BENCHMARK_NAMES.get(self.cfg.benchmark, self.cfg.benchmark),
                 "value": capital - sum(meta.values()) + sum(p.market_value for p in positions.values()),
                 "capital": capital,
                 "realized_pnl": self.storage.realized_pnl(),
@@ -108,16 +111,16 @@ class TradingBot:
         except Exception:
             log.warning("Kurs für Vergleich %s nicht verfügbar", sym)
             return None
-        start = self.storage.get("benchmark_start")
+        start = self.storage.get(f"benchmark_start_{sym}")
         if not start:
-            self.storage.set("benchmark_start", price)
+            self.storage.set(f"benchmark_start_{sym}", price)
             start = price
-        units = float(self.storage.get("benchmark_units", 0))
-        new = self.risk.deposits() - float(self.storage.get("benchmark_deposits", 0))
+        units = float(self.storage.get(f"benchmark_units_{sym}", 0))
+        new = self.risk.deposits() - float(self.storage.get(f"benchmark_deposits_{sym}", 0))
         if new > 0:
             units += new / price
-            self.storage.set("benchmark_units", units)
-            self.storage.set("benchmark_deposits", self.risk.deposits())
+            self.storage.set(f"benchmark_units_{sym}", units)
+            self.storage.set(f"benchmark_deposits_{sym}", self.risk.deposits())
         return self.cfg.risk.start_budget * price / float(start) + units * price
 
     def _cycle(self, today: date) -> None:

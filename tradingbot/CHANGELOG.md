@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.1
+- Vergleich jetzt mit dem MSCI World (US-ETF URTH) statt dem S&P 500. Neuer Sensor `sensor.tradingbot_vergleich_etf` ersetzt `sensor.tradingbot_vergleich_sp500`; der Vergleich startet neu.
+
 ## 0.4.0
 - Neue Option *Strategie*: `standard`, `trendfolger` oder `aggressiv` (Werte wie im Backtest getestet). Überschreibt die passenden Einstellungen aus `config.yaml`.
 
