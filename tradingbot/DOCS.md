@@ -33,6 +33,14 @@ Beim ersten Start jeder neuen Version testet der Bot seine Regeln gegen die echt
 
 Ist eine monatliche Einzahlung eingestellt, rechnet der Backtest sie mit ein. Die Rendite bezieht sich dann auf alles Eingezahlte, und der SPY-Vergleich kauft mit denselben Einzahlungen. Zwei Varianten testen einen 2x-Hebel (täglich angepasst wie ein Faktor-Zertifikat, 4 % Kosten pro Jahr). Das ist nur eine Näherung, kein echtes Derivat.
 
+## Strategie
+
+| Strategie | Trend | Stops | Positionen | Reserve | Not-Aus |
+|---|---|---|---|---|---|
+| standard | 10/30 Tage | 5 % / Trailing 6 %, Gewinnmitnahme 12 % | 4 × 20 % | 10 % | 25 % |
+| trendfolger | 50/200 Tage | 15 % / Trailing 15 % | 4 × 20 % | 10 % | 25 % |
+| aggressiv | 50/200 Tage | 15 % / Trailing 15 % | 3 × 34 % | 0 % | 50 % |
+
 ## Monatliche Einzahlung
 
 Option *Monatliche Einzahlung*: Der Betrag wird am Monatsanfang zum Kapital des Bots addiert. Im Paper-Modus ist das reine Buchhaltung (das Paper-Konto hat genug Spielgeld), im Live-Modus musst du das Geld selbst beim Broker einzahlen.

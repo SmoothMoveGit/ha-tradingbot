@@ -11,7 +11,7 @@ import logging
 from datetime import date
 
 from .bot import TradingBot
-from .config import _merge
+from .config import PROFILES, _merge
 from .broker.base import Bar
 from .broker.sim import SimBroker
 from .storage import Storage
@@ -120,19 +120,15 @@ VARIANTS: list[tuple[str, dict]] = [
     ("langer Trend 20/50", {"strategy": {"sma_fast": 20, "sma_slow": 50}}),
     ("langer Trend + weite Stops", {"strategy": {"sma_fast": 20, "sma_slow": 50},
                                     "risk": {"stop_loss_pct": 0.10, "trailing_stop_pct": 0.12, "take_profit_pct": 0.30}}),
-    ("Trendfolger 50/200", {"strategy": {"sma_fast": 50, "sma_slow": 200, "sell_threshold": -0.1},
-                            "risk": {"stop_loss_pct": 0.15, "trailing_stop_pct": 0.15, "take_profit_pct": 10.0}}),
+    ("Trendfolger 50/200", PROFILES["trendfolger"]),
     ("weniger Trades", {"strategy": {"buy_threshold": 0.5, "sell_threshold": -0.4},
                         "risk": {"rebuy_cooldown_days": 5}}),
     ("8 kleinere Positionen", {"risk": {"max_positions": 8, "max_position_pct": 0.11}}),
     ("nur Signal, keine Stops", {"risk": {"stop_loss_pct": 0.99, "trailing_stop_pct": 0.99, "take_profit_pct": 10.0}}),
 ]
 _TREND = dict(VARIANTS)["Trendfolger 50/200"]
-# Aggressiv: alles investiert, 3 große Positionen, Not-Aus erst bei 50 % Rückgang.
-_AGGRO = {"strategy": _TREND["strategy"],
-          "risk": {**_TREND["risk"], "max_positions": 3, "max_position_pct": 0.34, "min_cash_reserve_pct": 0.0,
-                   "daily_loss_limit_pct": 0.10, "max_drawdown_pct": 0.50}}
-VARIANTS.append(("aggressiv (Trendfolger, 3 Pos.)", _AGGRO))
+VARIANTS.append(("aggressiv (Trendfolger, 3 Pos.)", PROFILES["aggressiv"]))
+_AGGRO = PROFILES["aggressiv"]
 # Hebel wie bei Faktor-Zertifikaten: tägliche Kursänderung mal Faktor, dazu laufende Kosten.
 LEVERAGED: list[tuple[str, dict, float]] = [
     ("Hebel 2x, aktuell", {}, 2.0),

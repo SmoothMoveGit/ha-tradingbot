@@ -1,6 +1,7 @@
 """Konfiguration aus YAML-Datei plus Umgebungsvariablen (Secrets nur per .env)."""
 from __future__ import annotations
 
+import copy
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -97,11 +98,30 @@ def load_env_file(path: str | Path = ".env") -> None:
             os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
+# Fertige Strategie-Profile (Add-on-Option "Strategie"). Getestet im Backtest, siehe backtest.VARIANTS.
+_TREND_STRATEGY = {"sma_fast": 50, "sma_slow": 200, "sell_threshold": -0.1}
+_TREND_STOPS = {"stop_loss_pct": 0.15, "trailing_stop_pct": 0.15, "take_profit_pct": 10.0}
+PROFILES: dict[str, dict] = {
+    "standard": {},
+    "trendfolger": {"strategy": _TREND_STRATEGY,
+                    "risk": {**_TREND_STOPS, "max_positions": 4, "max_position_pct": 0.20, "min_cash_reserve_pct": 0.10,
+                             "daily_loss_limit_pct": 0.03, "max_drawdown_pct": 0.25}},
+    # alles investiert, 3 große Positionen, Not-Aus erst bei 50 % Rückgang
+    "aggressiv": {"strategy": _TREND_STRATEGY,
+                  "risk": {**_TREND_STOPS, "max_positions": 3, "max_position_pct": 0.34, "min_cash_reserve_pct": 0.0,
+                           "daily_loss_limit_pct": 0.10, "max_drawdown_pct": 0.50}},
+}
+
+
 def load_config(path: str | Path | None = None) -> Config:
     cfg = Config()
     if path and Path(path).exists():
         _merge(cfg, yaml.safe_load(Path(path).read_text()) or {})
     # Umgebungsvariablen haben Vorrang (z.B. aus der Home-Assistant-Add-on-Oberfläche)
+    if profile := os.getenv("TRADINGBOT_PROFILE"):
+        if profile not in PROFILES:
+            raise ValueError(f"Strategie muss eine von {', '.join(PROFILES)} sein")
+        _merge(cfg, copy.deepcopy(PROFILES[profile]))
     if os.getenv("TRADINGBOT_MODE"):
         cfg.mode = os.environ["TRADINGBOT_MODE"]
     if os.getenv("TRADINGBOT_START_BUDGET"):

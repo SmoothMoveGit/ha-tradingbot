@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.0
+- Neue Option *Strategie*: `standard`, `trendfolger` oder `aggressiv` (Werte wie im Backtest getestet). Überschreibt die passenden Einstellungen aus `config.yaml`.
+
 ## 0.3.3
 - Backtest: aggressive Varianten (Trendfolger mit 3 großen Positionen, ohne Cash-Reserve, Not-Aus erst bei 50 %), auch mit 2x- und 3x-Hebel.
 - Not-Aus im Backtest füllt nicht mehr das Protokoll.

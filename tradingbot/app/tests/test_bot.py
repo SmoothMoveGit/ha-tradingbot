@@ -278,3 +278,10 @@ def test_leveraged_series_doubles_daily_moves():
     out = leveraged([Bar(t0 + timedelta(days=i), c, c, c, c, 0) for i, c in enumerate(closes)], 2.0, 0.0)
     assert abs(out[1].close / out[0].close - 1.2) < 1e-9
     assert abs(out[2].close / out[1].close - 0.8) < 1e-9
+
+
+def test_strategy_profile_from_env(monkeypatch):
+    from tradingbot.config import load_config
+    monkeypatch.setenv("TRADINGBOT_PROFILE", "aggressiv")
+    cfg = load_config(None)
+    assert cfg.risk.max_positions == 3 and cfg.risk.max_drawdown_pct == 0.5 and cfg.strategy.sma_slow == 200

@@ -23,6 +23,7 @@ def main() -> int:
         "TRADINGBOT_DB_PATH": "/data/tradingbot.db",
         "TRADINGBOT_NOTIFY_SERVICE": opts.get("notify_service", ""),
         "TRADINGBOT_MONTHLY_DEPOSIT": str(opts.get("monthly_deposit", "")),
+        "TRADINGBOT_PROFILE": opts.get("strategy", ""),
     }
     if opts.get("anthropic_api_key"):
         env["TRADINGBOT_SENTIMENT"] = "claude"
@@ -36,8 +37,8 @@ def main() -> int:
         print(f"Neue Konfiguration angelegt: {CONFIG} (Watchlist und Risiko dort anpassbar)", flush=True)
 
     from .__main__ import main as cli
-    # neu testen bei neuer Version oder geänderter Einzahlung
-    marker = OPTIONS.parent / f"backtest-{os.getenv('TRADINGBOT_VERSION', 'dev')}-{os.getenv('TRADINGBOT_MONTHLY_DEPOSIT') or 0}.done"
+    # neu testen bei neuer Version, Einzahlung oder Strategie
+    marker = OPTIONS.parent / f"backtest-{os.getenv('TRADINGBOT_VERSION', 'dev')}-{os.getenv('TRADINGBOT_MONTHLY_DEPOSIT') or 0}-{os.getenv('TRADINGBOT_PROFILE') or 'standard'}.done"
     if env["TRADINGBOT_MODE"] != "sim" and not marker.exists():
         try:  # einmal pro Version: Regeln gegen echte Kurse prüfen, Ergebnis steht im Protokoll
             cli(["backtest", "--variants", "-c", str(CONFIG)])
