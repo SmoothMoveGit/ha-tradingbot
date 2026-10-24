@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.2.4
+- Protokoll zeigt, ob Claude oder das Lexikon die Nachrichten bewertet.
+
 ## 0.2.3
 - Klarere Meldung, wenn die Alpaca-Schlüssel fehlen.
 

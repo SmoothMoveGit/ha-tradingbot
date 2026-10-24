@@ -62,6 +62,7 @@ class NewsAnalyzer:
     def __init__(self, cfg, storage, broker):
         self.cfg, self.storage, self.broker = cfg, storage, broker
         self.engine = SentimentEngine(cfg.news.sentiment_engine, cfg.news.claude_model)
+        log.info("Nachrichtenbewertung: %s", "Claude (" + self.engine.model + ")" if self.engine.engine == "claude" else "Lexikon")
 
     def refresh(self) -> int:
         """Neue Nachrichten holen, bewerten, speichern. Gibt Anzahl neuer Artikel zurück."""
