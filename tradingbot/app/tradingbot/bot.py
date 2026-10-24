@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import date
+from datetime import date, datetime
 
 from .homeassistant import Reporter
 from .news import MARKET, NewsAnalyzer
@@ -30,15 +30,36 @@ class TradingBot:
         meta = self.storage.all_meta()
         for sym in list(meta):
             if sym not in held:
-                log.warning("%s nicht mehr im Depot (extern verkauft?), entferne aus Verwaltung", sym)
-                self.storage.close_meta(sym)
-                meta.pop(sym)
+                opened = self.storage.get_meta(sym)[2]
+                fill = self.broker.last_sell_fill(sym, datetime.fromisoformat(opened))
+                if fill:
+                    self._record_sell(sym, fill, "Verkauf beim Broker (Stop-Order)", meta, date.today())
+                else:
+                    log.warning("%s nicht mehr im Depot (extern verkauft?), entferne aus Verwaltung", sym)
+                    self.storage.close_meta(sym)
+                    meta.pop(sym)
         return {s: held[s] for s in meta}, meta
+
+    def _broker_stop(self, pos, high: float) -> None:
+        """Stop-Order beim Broker auf dem Niveau, ab dem der Bot selbst verkaufen würde."""
+        if not self.cfg.risk.broker_stops:
+            return
+        r = self.cfg.risk
+        stop = pos.avg_entry_price * (1 - r.stop_loss_pct)
+        trail = high * (1 - r.trailing_stop_pct)
+        if trail > pos.avg_entry_price:
+            stop = max(stop, trail)
+        try:
+            self.broker.ensure_stop(pos.symbol, pos.qty, stop)
+        except Exception:
+            log.exception("Stop-Order für %s nicht möglich", pos.symbol)
 
     def _sell(self, symbol: str, reason: str, meta: dict, today: date) -> None:
         fill = self.broker.sell_all(symbol)
-        if not fill:
-            return
+        if fill:
+            self._record_sell(symbol, fill, reason, meta, today)
+
+    def _record_sell(self, symbol: str, fill, reason: str, meta: dict, today: date) -> None:
         pnl = fill.qty * fill.price - meta.get(symbol, 0.0)
         self.storage.record_trade(symbol, "sell", fill.qty, fill.price, reason, pnl)
         self.storage.close_meta(symbol)
@@ -62,7 +83,9 @@ class TradingBot:
             positions, meta = self._own_positions()
             capital = self.risk.bot_capital()
             last = self.storage.recent_trades(1)
+            bench = self._benchmark_value()
             self.reporter.publish({
+                "benchmark_value": bench,
                 "value": capital - sum(meta.values()) + sum(p.market_value for p in positions.values()),
                 "capital": capital,
                 "realized_pnl": self.storage.realized_pnl(),
@@ -74,6 +97,22 @@ class TradingBot:
             })
         except Exception:
             log.exception("Status konnte nicht gemeldet werden")
+
+    def _benchmark_value(self) -> float | None:
+        """Was das Startbudget wert wäre, hätte man es beim ersten Start in den Vergleichs-ETF gesteckt."""
+        sym = self.cfg.benchmark
+        if not sym:
+            return None
+        try:
+            price = self.broker.last_price(sym)
+        except Exception:
+            log.warning("Kurs für Vergleich %s nicht verfügbar", sym)
+            return None
+        start = self.storage.get("benchmark_start")
+        if not start:
+            self.storage.set("benchmark_start", price)
+            start = price
+        return self.cfg.risk.start_budget * price / float(start)
 
     def _cycle(self, today: date) -> None:
         if self.risk.halted:
@@ -123,6 +162,8 @@ class TradingBot:
                 reason = f"Signal negativ ({sig.score:+.2f})"
             if reason:
                 self._sell(sym, reason, meta, today)
+            else:
+                self._broker_stop(pos, high)
 
         # 2) Käufe
         self.status = "Tageslimit erreicht" if limit == "day" else "handelt"
@@ -152,6 +193,9 @@ class TradingBot:
                 meta[sig.symbol] = self.storage.all_meta()[sig.symbol]
                 reason = f"Trend {sig.trend:+.2f}, News {sig.news:+.2f}, Markt {sig.market:+.2f}"
                 self.storage.record_trade(sig.symbol, "buy", fill.qty, fill.price, reason)
+                held = self.broker.positions().get(sig.symbol)
+                if held:
+                    self._broker_stop(held, fill.price)
                 log.info("KAUF %s %.4f @ %.2f (%.2f) | %s", sig.symbol, fill.qty, fill.price, cost, reason)
                 self.reporter.notify(f"Tradingbot: {sig.symbol} gekauft", f"{cost:.2f} $ zu {fill.price:.2f} $ ({reason})")
 

@@ -23,8 +23,17 @@ Der Bot meldet diese Entitäten (nach jedem Zyklus aktualisiert):
 | `sensor.tradingbot_positionen` | Anzahl offener Positionen (Liste als Attribut) |
 | `sensor.tradingbot_status` | handelt / Börse geschlossen / Tageslimit erreicht / Not-Aus |
 | `binary_sensor.tradingbot_not_aus` | an, wenn der Not-Aus ausgelöst hat |
+| `sensor.tradingbot_vergleich_sp500` | Wert des Startbudgets, hätte man es beim ersten Start in den S&P-500-ETF gesteckt; Attribut `vorsprung` = Bot minus ETF |
 
 Käufe, Verkäufe und Not-Aus kommen als Benachrichtigung (Option *Benachrichtigungsdienst*, z.B. `notify.mobile_app_dein_handy`).
+
+## Backtest
+
+Beim ersten Start jeder neuen Version testet der Bot seine Regeln gegen die echten Tageskurse der letzten 3 Jahre und schreibt das Ergebnis ins Protokoll (Zeilen mit `BACKTEST`). Nachrichten gibt es rückwirkend nicht, getestet werden Trend-Signal und Risikoregeln.
+
+## Stop-Order bei Alpaca
+
+Für jede Position liegt zusätzlich eine Stop-Order bei Alpaca. Sie gilt bis Handelsschluss und wird jeden Handelstag erneuert. So greift der Stop-Loss auch, wenn der Bot kurz nicht läuft. Ist der Pi über Nacht oder mehrere Tage aus, fehlt der Schutz ab dem nächsten Handelstag.
 
 ## Feineinstellungen
 

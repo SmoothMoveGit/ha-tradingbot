@@ -22,6 +22,7 @@ class RiskConfig:
     max_drawdown_pct: float = 0.25        # Not-Aus dauerhaft (manuell zurücksetzen)
     min_order_value: float = 10.0
     rebuy_cooldown_days: int = 2          # nach Verkauf diese Aktie so lange nicht wieder kaufen
+    broker_stops: bool = True             # Stop-Order zusätzlich beim Broker hinterlegen
 
 
 @dataclass
@@ -53,6 +54,7 @@ class Config:
     watchlist: list[str] = field(default_factory=lambda: ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL"])
     aliases: dict[str, list[str]] = field(default_factory=dict)
     db_path: str = "data/tradingbot.db"
+    benchmark: str = "SPY"                # Vergleich: einfach einen S&P-500-ETF halten
     risk: RiskConfig = field(default_factory=RiskConfig)
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
     news: NewsConfig = field(default_factory=NewsConfig)

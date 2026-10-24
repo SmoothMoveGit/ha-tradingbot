@@ -6,14 +6,14 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from alpaca.common.exceptions import APIError
-from alpaca.data.enums import DataFeed
+from alpaca.data.enums import Adjustment, DataFeed
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.historical.news import NewsClient
 from alpaca.data.requests import NewsRequest, StockBarsRequest, StockLatestTradeRequest
 from alpaca.data.timeframe import TimeFrame
 from alpaca.trading.client import TradingClient
-from alpaca.trading.enums import OrderSide, TimeInForce
-from alpaca.trading.requests import MarketOrderRequest
+from alpaca.trading.enums import OrderSide, OrderType, QueryOrderStatus, TimeInForce
+from alpaca.trading.requests import GetOrdersRequest, MarketOrderRequest, StopOrderRequest
 
 from .base import Account, Bar, Broker, Fill, Position
 
@@ -49,6 +49,14 @@ class AlpacaBroker(Broker):
         bars = self.data.get_stock_bars(req).data.get(symbol, [])
         return [Bar(b.timestamp, b.open, b.high, b.low, b.close, b.volume) for b in bars][-days:]
 
+    def history(self, symbols: list[str], start: datetime) -> dict[str, list[Bar]]:
+        """Tageskurse seit start, um Aktiensplits bereinigt (für den Backtest)."""
+        req = StockBarsRequest(symbol_or_symbols=symbols, timeframe=TimeFrame.Day, start=start,
+                               feed=DataFeed.IEX, adjustment=Adjustment.ALL)
+        data = self.data.get_stock_bars(req).data
+        return {s: [Bar(b.timestamp, b.open, b.high, b.low, b.close, b.volume) for b in data.get(s, [])]
+                for s in symbols}
+
     def last_price(self, symbol: str) -> float:
         req = StockLatestTradeRequest(symbol_or_symbols=symbol, feed=DataFeed.IEX)
         return float(self.data.get_stock_latest_trade(req)[symbol].price)
@@ -79,7 +87,49 @@ class AlpacaBroker(Broker):
             return None
         return Fill(symbol, "buy", float(o.filled_qty), float(o.filled_avg_price))
 
+    def _open_orders(self, symbol: str):
+        return self.trading.get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol]))
+
+    def _cancel_open(self, symbol: str) -> None:
+        for o in self._open_orders(symbol):
+            try:
+                self.trading.cancel_order_by_id(o.id)
+            except APIError as e:
+                log.warning("Order %s für %s nicht stornierbar: %s", o.id, symbol, e)
+        time.sleep(1)  # Alpaca gibt die Stückzahl erst nach der Stornierung frei
+
+    def ensure_stop(self, symbol: str, qty: float, stop_price: float) -> None:
+        """Hält genau eine Stop-Order beim Broker aktuell. Gültig bis Handelsschluss, wird täglich erneuert."""
+        stop_price = round(stop_price, 2)
+        stops = [o for o in self._open_orders(symbol) if o.type == OrderType.STOP]
+        if stops and abs(float(stops[0].stop_price) - stop_price) / stop_price < 0.005:
+            return
+        if stops:
+            self._cancel_open(symbol)
+        for q in (round(qty, 9), float(int(qty))):  # Bruchteile, sonst nur ganze Stücke
+            if q <= 0:
+                continue
+            req = StopOrderRequest(symbol=symbol, qty=q, side=OrderSide.SELL,
+                                   time_in_force=TimeInForce.DAY, stop_price=stop_price)
+            try:
+                self.trading.submit_order(req)
+                log.info("Stop-Order bei Alpaca: %s %.4f Stück, Stopp bei %.2f", symbol, q, stop_price)
+                return
+            except APIError as e:
+                log.warning("Stop-Order %s (%.4f Stück) abgelehnt: %s", symbol, q, e)
+        log.warning("Kein Stop beim Broker für %s, der Bot überwacht selbst", symbol)
+
+    def last_sell_fill(self, symbol: str, since: datetime | None = None) -> Fill | None:
+        orders = self.trading.get_orders(GetOrdersRequest(
+            status=QueryOrderStatus.CLOSED, symbols=[symbol], side=OrderSide.SELL, limit=5, after=since))
+        filled = [o for o in orders if o.filled_qty and float(o.filled_qty) > 0]
+        if not filled:
+            return None
+        o = filled[0]
+        return Fill(symbol, "sell", float(o.filled_qty), float(o.filled_avg_price))
+
     def sell_all(self, symbol: str) -> Fill | None:
+        self._cancel_open(symbol)
         try:
             o = self._wait_fill(self.trading.close_position(symbol).id)
         except APIError as e:

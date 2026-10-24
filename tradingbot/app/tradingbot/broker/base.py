@@ -71,3 +71,11 @@ class Broker(ABC):
 
     def fetch_news(self, symbols: list[str], since: datetime) -> list[dict]:
         return []
+
+    # Schutz beim Broker (greift auch, wenn der Bot nicht läuft). Standard: nicht unterstützt.
+    def ensure_stop(self, symbol: str, qty: float, stop_price: float) -> None:
+        pass
+
+    def last_sell_fill(self, symbol: str, since: datetime | None = None) -> Fill | None:
+        """Letzter ausgeführter Verkauf, z.B. durch eine Stop-Order beim Broker."""
+        return None

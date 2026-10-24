@@ -35,6 +35,13 @@ def main() -> int:
         print(f"Neue Konfiguration angelegt: {CONFIG} (Watchlist und Risiko dort anpassbar)", flush=True)
 
     from .__main__ import main as cli
+    marker = OPTIONS.parent / f"backtest-{os.getenv('TRADINGBOT_VERSION', 'dev')}.done"
+    if env["TRADINGBOT_MODE"] != "sim" and not marker.exists():
+        try:  # einmal pro Version: Regeln gegen echte Kurse prüfen, Ergebnis steht im Protokoll
+            cli(["backtest", "-c", str(CONFIG)])
+            marker.touch()
+        except Exception as e:
+            print(f"Backtest fehlgeschlagen: {e}", flush=True)
     return cli(["run", "-c", str(CONFIG)])
 
 

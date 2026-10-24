@@ -168,11 +168,71 @@ def test_addon_reads_options(tmp_path, monkeypatch):
     monkeypatch.setattr(addon, "CONFIG", tmp_path / "cfg" / "config.yaml")
     for k in ("CONFIRM_LIVE_TRADING", "ALPACA_API_KEY", "TRADINGBOT_START_BUDGET"):
         monkeypatch.delenv(k, raising=False)
-    seen = {}
+    calls = []
     import tradingbot.__main__ as cli
-    monkeypatch.setattr(cli, "main", lambda argv: seen.setdefault("argv", argv) and 0)
+    monkeypatch.setattr(cli, "main", lambda argv: calls.append(argv[0]) or 0)
     addon.main()
+    addon.main()  # zweiter Start: Backtest nur einmal pro Version
     import os
     assert os.environ["ALPACA_API_KEY"] == "k" and os.environ["TRADINGBOT_START_BUDGET"] == "250"
     assert "CONFIRM_LIVE_TRADING" not in os.environ
-    assert (tmp_path / "cfg" / "config.yaml").exists() and seen["argv"][0] == "run"
+    assert (tmp_path / "cfg" / "config.yaml").exists()
+    assert calls == ["backtest", "run", "run"]
+
+
+def test_backtest_on_history():
+    import math
+    from datetime import datetime, timedelta, timezone
+    from tradingbot.backtest import format_result, run_backtest
+    from tradingbot.broker.base import Bar
+    t0 = datetime(2023, 1, 2, tzinfo=timezone.utc)
+
+    def series(f):
+        return [Bar(t0 + timedelta(days=i), f(i), f(i), f(i), f(i), 1e6) for i in range(300)]
+
+    bars = {
+        "UP": series(lambda i: 100 * math.exp(0.004 * i)),
+        "DOWN": series(lambda i: 100 * math.exp(-0.004 * i)),
+        "SPY": series(lambda i: 400 * math.exp(0.001 * i)),
+    }
+    cfg = Config(watchlist=["UP", "DOWN"])
+    cfg.risk.start_budget = 300
+    r = run_backtest(cfg, bars)
+    assert r["final"] > 300 and r["trades"] >= 1 and r["max_drawdown_pct"] < 0.1
+    assert abs(r["benchmark_return_pct"] - (math.exp(0.001 * (299 - 35)) - 1)) < 1e-6
+    assert "Vergleich SPY" in format_result(r)[-1]
+
+
+def test_historical_broker_has_no_lookahead():
+    from datetime import date, datetime, timezone
+    from tradingbot.backtest import HistoricalBroker
+    from tradingbot.broker.base import Bar
+    bars = {"A": [Bar(datetime(2024, 1, d, tzinfo=timezone.utc), d, d, d, d, 1) for d in range(1, 11)]}
+    b = HistoricalBroker(100, bars)
+    b.set_date(date(2024, 1, 5))
+    assert b.last_price("A") == 5 and len(b.daily_bars("A", 100)) == 5
+
+
+def test_benchmark_and_broker_stop():
+    bot, broker = make_bot(symbols=("AAA", "SPY"))
+    stops = []
+    broker.ensure_stop = lambda sym, qty, price: stops.append((sym, round(price, 2)))
+    bot.reporter = FakeReporter()
+    bot.run_cycle()
+    s = bot.reporter.published[-1]
+    assert s["benchmark_value"] == pytest.approx(bot.cfg.risk.start_budget)
+    assert stops and stops[0][0] in ("AAA", "SPY")
+    entry = broker.holdings[stops[0][0]][1]
+    assert stops[0][1] == round(entry * (1 - bot.cfg.risk.stop_loss_pct), 2)
+
+
+def test_sell_by_broker_stop_is_recorded():
+    from tradingbot.broker.base import Fill
+    bot, broker = make_bot()
+    bot.run_cycle()
+    qty, _ = broker.holdings.pop("AAA")  # Stop-Order beim Broker hat verkauft
+    broker.last_sell_fill = lambda sym, since=None: Fill(sym, "sell", qty, 100.0)
+    bot.run_cycle()
+    t = bot.storage.recent_trades(5)
+    assert any(x[2] == "sell" and "Broker" in x[6] for x in t)
+    assert bot.storage.realized_pnl() < 0

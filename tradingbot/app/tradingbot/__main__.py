@@ -12,9 +12,10 @@ from .storage import Storage
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="tradingbot", description="Autonomer Aktien-Tradingbot")
-    p.add_argument("command", choices=["run", "once", "status", "sim", "reset-halt"])
+    p.add_argument("command", choices=["run", "once", "status", "sim", "backtest", "reset-halt"])
     p.add_argument("-c", "--config", default="config.yaml")
     p.add_argument("--days", type=int, default=90, help="Tage für 'sim'")
+    p.add_argument("--years", type=float, default=3, help="Jahre für 'backtest'")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
 
@@ -34,6 +35,8 @@ def main(argv=None) -> int:
         return 0
     if args.command == "sim":
         return simulate(cfg, args.days)
+    if args.command == "backtest":
+        return backtest(cfg, args.years)
 
     from .bot import TradingBot
     if cfg.mode == "live":
@@ -60,6 +63,22 @@ def status(cfg) -> int:
     print("\nLetzte Nachrichten:")
     for t, sym, score, headline in st.recent_news():
         print(f"  {t[:16]} {sym:8} {score:+.2f}  {headline[:90]}")
+    return 0
+
+
+def backtest(cfg, years: float) -> int:
+    """Regeln gegen echte Alpaca-Tageskurse der letzten Jahre testen."""
+    from datetime import datetime, timedelta, timezone
+
+    from .backtest import format_result, run_backtest
+    from .broker.alpaca import AlpacaBroker
+    broker = AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)
+    start = datetime.now(timezone.utc) - timedelta(days=int(365 * years) + 60)
+    symbols = list(dict.fromkeys(cfg.watchlist + ([cfg.benchmark] if cfg.benchmark else [])))
+    logging.getLogger(__name__).info("Backtest: lade Tageskurse für %d Werte seit %s", len(symbols), start.date())
+    result = run_backtest(cfg, broker.history(symbols, start))
+    for line in format_result(result):
+        logging.getLogger("tradingbot.backtest").info(line)
     return 0
 
 
