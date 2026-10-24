@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 class AlpacaBroker(Broker):
     def __init__(self, key: str | None, secret: str | None, paper: bool = True):
         if not key or not secret:
-            raise SystemExit("ALPACA_API_KEY und ALPACA_SECRET_KEY fehlen (siehe .env.example).")
+            raise SystemExit("Alpaca-Schlüssel fehlen: in der Add-on-Konfiguration bzw. in .env eintragen.")
         self.paper = paper
         self.trading = TradingClient(key, secret, paper=paper)
         self.data = StockHistoricalDataClient(key, secret)

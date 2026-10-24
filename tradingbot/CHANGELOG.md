@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+- Klarere Meldung, wenn die Alpaca-Schlüssel fehlen.
+
+## 0.2.2
+- Add-on wird in Home Assistant erkannt.
+
 ## 0.2.0
 - Läuft als Home-Assistant-Add-on, Sensoren und Benachrichtigungen in Home Assistant.
 
