@@ -241,14 +241,40 @@ def test_sell_by_broker_stop_is_recorded():
 def test_variants_compare_two_periods():
     import math
     from datetime import date, datetime, timedelta, timezone
-    from tradingbot.backtest import VARIANTS, format_variants, run_variants
+    from tradingbot.backtest import LEVERAGED, VARIANTS, format_variants, run_variants
     from tradingbot.broker.base import Bar
     t0 = datetime(2023, 1, 2, tzinfo=timezone.utc)
     bars = {s: [Bar(t0 + timedelta(days=i), p, p, p, p, 1) for i in range(700)
                 for p in [100 * math.exp(k * i)]] for s, k in (("UP", 0.002), ("SPY", 0.001))}
     cfg = Config(watchlist=["UP"])
     res = run_variants(cfg, bars, date(2023, 10, 1), date(2024, 6, 1), date(2024, 12, 1))
-    assert [r["name"] for r in res] == [n for n, _ in VARIANTS]
+    assert [r["name"] for r in res] == [n for n, _ in VARIANTS + LEVERAGED]
     assert all(r["train"]["end"] <= date(2024, 6, 1) <= r["test"]["start"] for r in res)
     assert cfg.strategy.sma_slow == 30  # Varianten ändern die echte Konfiguration nicht
-    assert len(format_variants(res)) == 3 + len(VARIANTS)
+    assert len(format_variants(res)) == 3 + len(VARIANTS) + len(LEVERAGED)
+
+
+def test_monthly_deposits(tmp_path):
+    from datetime import date
+    from tradingbot.config import Config
+    from tradingbot.risk import RiskManager
+    from tradingbot.storage import Storage
+    cfg = Config()
+    cfg.risk.monthly_deposit = 55
+    st = Storage(str(tmp_path / "t.db"))
+    rm = RiskManager(cfg, st)
+    assert rm.apply_deposits(date(2026, 10, 24)) == 0  # erster Monat: nur merken
+    assert rm.apply_deposits(date(2026, 10, 30)) == 0
+    assert rm.apply_deposits(date(2026, 12, 1)) == 110
+    assert rm.bot_capital() == cfg.risk.start_budget + 110
+
+
+def test_leveraged_series_doubles_daily_moves():
+    from datetime import datetime, timedelta, timezone
+    from tradingbot.backtest import leveraged
+    from tradingbot.broker.base import Bar
+    t0 = datetime(2024, 1, 2, tzinfo=timezone.utc)
+    closes = [100, 100, 110, 99]
+    out = leveraged([Bar(t0 + timedelta(days=i), c, c, c, c, 0) for i, c in enumerate(closes)], 2.0, 0.0)
+    assert abs(out[1].close / out[0].close - 1.2) < 1e-9
+    assert abs(out[2].close / out[1].close - 0.8) < 1e-9

@@ -11,6 +11,9 @@ configuration:
   start_budget:
     name: Startbudget (USD)
     description: So viel Geld darf der Bot einsetzen. Gewinne kommen dazu, Verluste gehen ab.
+  monthly_deposit:
+    name: Monatliche Einzahlung (USD)
+    description: Wird jeden Monat zum Kapital addiert (auch im Backtest). 0 = keine.
   notify_service:
     name: Benachrichtigungsdienst
     description: "z.B. notify.mobile_app_dein_handy. Leer = Benachrichtigung in Home Assistant."

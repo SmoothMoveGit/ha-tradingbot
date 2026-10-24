@@ -99,7 +99,7 @@ class TradingBot:
             log.exception("Status konnte nicht gemeldet werden")
 
     def _benchmark_value(self) -> float | None:
-        """Was das Startbudget wert wäre, hätte man es beim ersten Start in den Vergleichs-ETF gesteckt."""
+        """Was Startbudget und Einzahlungen wert wären, hätte man sie jeweils in den Vergleichs-ETF gesteckt."""
         sym = self.cfg.benchmark
         if not sym:
             return None
@@ -112,13 +112,21 @@ class TradingBot:
         if not start:
             self.storage.set("benchmark_start", price)
             start = price
-        return self.cfg.risk.start_budget * price / float(start)
+        units = float(self.storage.get("benchmark_units", 0))
+        new = self.risk.deposits() - float(self.storage.get("benchmark_deposits", 0))
+        if new > 0:
+            units += new / price
+            self.storage.set("benchmark_units", units)
+            self.storage.set("benchmark_deposits", self.risk.deposits())
+        return self.cfg.risk.start_budget * price / float(start) + units * price
 
     def _cycle(self, today: date) -> None:
         if self.risk.halted:
             self.status = "Not-Aus"
             log.error("Bot ist per Not-Aus angehalten (max. Drawdown). 'python -m tradingbot reset-halt' zum Fortsetzen.")
             return
+        if deposit := self.risk.apply_deposits(today):
+            log.info("Monatliche Einzahlung gebucht: +%.2f $, Kapital jetzt %.2f $", deposit, self.risk.bot_capital())
         try:
             self.news.refresh()
         except Exception:

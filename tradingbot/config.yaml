@@ -1,5 +1,5 @@
 name: Tradingbot
-version: "0.3.1"
+version: "0.3.2"
 slug: tradingbot
 description: Autonomer Aktien-Tradingbot mit Nachrichtenanalyse (startet im Paper-Modus)
 url: https://github.com/SmoothMoveGit/ha-tradingbot
@@ -17,11 +17,13 @@ options:
   alpaca_secret_key: ""
   mode: paper
   start_budget: 300
+  monthly_deposit: 0
 schema:
   alpaca_api_key: password
   alpaca_secret_key: password
   mode: list(paper|live|sim)
   start_budget: float(10,)
+  monthly_deposit: float(0,)
   notify_service: str?
   anthropic_api_key: password?
   live_confirmation: str?

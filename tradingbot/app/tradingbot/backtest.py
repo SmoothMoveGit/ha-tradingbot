@@ -59,16 +59,24 @@ def run_backtest(cfg, bars: dict[str, list[Bar]], start: date | None = None, end
     bot_logger = logging.getLogger("tradingbot.bot")
     level = bot_logger.level
     bot_logger.setLevel(logging.WARNING)
-    peak, max_dd, bench_start = budget, 0.0, None
+    deposit = cfg.risk.monthly_deposit
+    paid, units, peak, max_dd, month = budget, 0.0, 1.0, 0.0, None
     try:
         for d in days:
             broker.set_date(d)
+            m = d.year * 12 + d.month
+            if month is not None and m != month and deposit:
+                broker.cash += deposit  # dieselbe Einzahlung, die der Bot in seinem Kapital bucht
+                paid += deposit
+                if bench:
+                    units += deposit / broker.last_price(bench)
+            month = m
             bot.run_cycle(today=d)
-            value = broker.account().equity
-            peak = max(peak, value)
-            max_dd = max(max_dd, 1 - value / peak)
-            if bench and bench_start is None:
-                bench_start = broker.last_price(bench)
+            if bench and not units:
+                units = budget / broker.last_price(bench)
+            ratio = broker.account().equity / paid
+            peak = max(peak, ratio)
+            max_dd = max(max_dd, 1 - ratio / peak)
     finally:
         bot_logger.setLevel(level)
 
@@ -76,28 +84,30 @@ def run_backtest(cfg, bars: dict[str, list[Bar]], start: date | None = None, end
     sells = [t for t in trades if t[2] == "sell"]
     final = broker.account().equity
     return {
-        "start": days[0], "end": days[-1], "budget": budget, "final": final,
-        "return_pct": final / budget - 1, "max_drawdown_pct": max_dd,
+        "start": days[0], "end": days[-1], "budget": budget, "paid_in": paid, "final": final,
+        "return_pct": final / paid - 1, "max_drawdown_pct": max_dd,
         "trades": len(trades), "sells": len(sells),
         "win_rate": sum(1 for t in sells if t[5] > 0) / len(sells) if sells else 0.0,
         "halted": bot.risk.halted,
         "benchmark": bench,
-        "benchmark_return_pct": broker.last_price(bench) / bench_start - 1 if bench else None,
+        "benchmark_final": units * broker.last_price(bench) if bench else None,
+        "benchmark_return_pct": units * broker.last_price(bench) / paid - 1 if bench else None,
     }
 
 
 def format_result(r: dict) -> list[str]:
     lines = [
         f"BACKTEST {r['start']} bis {r['end']} (nur Trend + Risikoregeln, ohne Nachrichten)",
-        f"  Bot: {r['budget']:.0f} $ -> {r['final']:.2f} $ ({r['return_pct']:+.1%}), "
-        f"größter Rückgang {r['max_drawdown_pct']:.1%}",
+        f"  Eingezahlt {r['paid_in']:.0f} $ (Start {r['budget']:.0f} $ + monatlich) -> Bot {r['final']:.2f} $ "
+        f"({r['return_pct']:+.1%}), größter Rückgang {r['max_drawdown_pct']:.1%}",
         f"  {r['trades']} Trades, {r['sells']} Verkäufe, davon {r['win_rate']:.0%} mit Gewinn",
     ]
     if r["halted"]:
         lines.append("  Achtung: Not-Aus (max. Verlust) wurde im Testzeitraum ausgelöst, danach kein Handel mehr")
     if r["benchmark"]:
         diff = r["return_pct"] - r["benchmark_return_pct"]
-        lines.append(f"  Vergleich {r['benchmark']} halten: {r['benchmark_return_pct']:+.1%} "
+        lines.append(f"  Vergleich {r['benchmark']} (gleiche Einzahlungen): {r['benchmark_final']:.2f} $ "
+                     f"({r['benchmark_return_pct']:+.1%}) "
                      f"-> Bot {'besser' if diff >= 0 else 'schlechter'} um {abs(diff):.1%}-Punkte")
     return lines
 
@@ -117,16 +127,32 @@ VARIANTS: list[tuple[str, dict]] = [
     ("8 kleinere Positionen", {"risk": {"max_positions": 8, "max_position_pct": 0.11}}),
     ("nur Signal, keine Stops", {"risk": {"stop_loss_pct": 0.99, "trailing_stop_pct": 0.99, "take_profit_pct": 10.0}}),
 ]
+# Hebel wie bei Faktor-Zertifikaten: tägliche Kursänderung mal Faktor, dazu laufende Kosten.
+LEVERAGED: list[tuple[str, dict]] = [
+    ("Hebel 2x, aktuell", {}),
+    ("Hebel 2x, Trendfolger 50/200", dict(VARIANTS)["Trendfolger 50/200"]),
+]
+LEVERAGE, LEVERAGE_COST = 2.0, 0.04  # Faktor, Kosten pro Jahr (Finanzierung, Spread)
 WARMUP_DAYS = 300  # Kurse vor dem Teststart, damit auch lange Durchschnitte (200 Tage) bereitstehen
+
+
+def leveraged(bars: list[Bar], factor: float = LEVERAGE, cost: float = LEVERAGE_COST) -> list[Bar]:
+    """Künstliche Kursreihe eines täglich angepassten Hebelprodukts auf den Basiswert."""
+    out, p = [], 100.0
+    for prev, b in zip(bars, bars[1:]):
+        p *= max(0.0, 1 + factor * (b.close / prev.close - 1) - cost / 252)
+        out.append(Bar(b.time, p, p, p, p, b.volume))
+    return out
 
 
 def run_variants(cfg, bars: dict[str, list[Bar]], start: date, cut: date, end: date) -> list[dict]:
     """Jede Variante zweimal: Vergleichszeitraum (start..cut) und Prüfjahr (cut..end), je mit frischem Budget."""
+    lev_bars = {s: (b if s == cfg.benchmark else leveraged(b)) for s, b in bars.items()}
     results = []
-    for name, overrides in VARIANTS:
+    for name, overrides, data in [(n, o, bars) for n, o in VARIANTS] + [(n, o, lev_bars) for n, o in LEVERAGED]:
         vcfg = _merge(copy.deepcopy(cfg), overrides)
-        a = run_backtest(vcfg, bars, start, cut)
-        b = run_backtest(vcfg, bars, cut, end)
+        a = run_backtest(vcfg, data, start, cut)
+        b = run_backtest(vcfg, data, cut, end)
         results.append({"name": name, "train": a, "test": b})
     return results
 
@@ -134,9 +160,10 @@ def run_variants(cfg, bars: dict[str, list[Bar]], start: date, cut: date, end: d
 def format_variants(results: list[dict]) -> list[str]:
     a, b = results[0]["train"], results[0]["test"]
     lines = [
-        "VARIANTEN (nur Trend + Risikoregeln, ohne Nachrichten, je 300 $ Start)",
+        f"VARIANTEN (nur Trend + Risikoregeln, ohne Nachrichten, Start {a['budget']:.0f} $, "
+        f"Rendite auf das Eingezahlte)",
         f"  Zeitraum A {a['start']} bis {a['end']} | Prüfjahr B {b['start']} bis {b['end']}",
-        f"  {'SPY halten':28} A {a['benchmark_return_pct']:+7.1%}            | B {b['benchmark_return_pct']:+7.1%}",
+        f"  {a['benchmark'] + ' halten':28} A {a['benchmark_return_pct']:+7.1%}            | B {b['benchmark_return_pct']:+7.1%}",
     ]
     for r in sorted(results, key=lambda r: -r["train"]["return_pct"]):
         x, y = r["train"], r["test"]

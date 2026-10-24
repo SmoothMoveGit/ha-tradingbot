@@ -8,6 +8,9 @@ configuration:
     description: "paper = simulated money (recommended), sim = offline, live = REAL MONEY."
   start_budget:
     name: Start budget (USD)
+  monthly_deposit:
+    name: Monthly deposit (USD)
+    description: Added to the capital every month (also in the backtest). 0 = none.
   notify_service:
     name: Notify service
     description: "e.g. notify.mobile_app_phone. Empty = persistent notification."

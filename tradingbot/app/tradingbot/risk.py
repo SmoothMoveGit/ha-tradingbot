@@ -9,12 +9,26 @@ class RiskManager:
         self.r = cfg.risk
         self.storage = storage
 
+    def deposits(self) -> float:
+        return float(self.storage.get("deposits_total", 0))
+
+    def apply_deposits(self, today: date) -> float:
+        """Bucht die monatliche Einzahlung, einmal pro neuem Kalendermonat. Gibt den neuen Betrag zurück."""
+        month = today.year * 12 + today.month - 1
+        last = self.storage.get("deposit_month")
+        self.storage.set("deposit_month", month)
+        if last is None or not self.r.monthly_deposit or month <= int(last):
+            return 0.0
+        amount = self.r.monthly_deposit * (month - int(last))
+        self.storage.set("deposits_total", self.deposits() + amount)
+        return amount
+
     def bot_capital(self) -> float:
-        """Startguthaben plus realisierte Gewinne (falls erlaubt) bzw. minus Verluste."""
+        """Startguthaben plus Einzahlungen plus realisierte Gewinne (falls erlaubt) bzw. minus Verluste."""
         pnl = self.storage.realized_pnl()
         if not self.r.reinvest_profits:
             pnl = min(pnl, 0.0)
-        return self.r.start_budget + pnl
+        return self.r.start_budget + self.deposits() + pnl
 
     def free_budget(self, invested_cost: float, broker_cash: float) -> float:
         usable = self.bot_capital() * (1 - self.r.min_cash_reserve_pct) - invested_cost

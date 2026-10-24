@@ -31,6 +31,12 @@ Käufe, Verkäufe und Not-Aus kommen als Benachrichtigung (Option *Benachrichtig
 
 Beim ersten Start jeder neuen Version testet der Bot seine Regeln gegen die echten Tageskurse der letzten 3 Jahre und schreibt das Ergebnis ins Protokoll (Zeilen mit `BACKTEST`). Nachrichten gibt es rückwirkend nicht, getestet werden Trend-Signal und Risikoregeln.
 
+Ist eine monatliche Einzahlung eingestellt, rechnet der Backtest sie mit ein. Die Rendite bezieht sich dann auf alles Eingezahlte, und der SPY-Vergleich kauft mit denselben Einzahlungen. Zwei Varianten testen einen 2x-Hebel (täglich angepasst wie ein Faktor-Zertifikat, 4 % Kosten pro Jahr). Das ist nur eine Näherung, kein echtes Derivat.
+
+## Monatliche Einzahlung
+
+Option *Monatliche Einzahlung*: Der Betrag wird am Monatsanfang zum Kapital des Bots addiert. Im Paper-Modus ist das reine Buchhaltung (das Paper-Konto hat genug Spielgeld), im Live-Modus musst du das Geld selbst beim Broker einzahlen.
+
 ## Stop-Order bei Alpaca
 
 Für jede Position liegt zusätzlich eine Stop-Order bei Alpaca. Sie gilt bis Handelsschluss und wird jeden Handelstag erneuert. So greift der Stop-Loss auch, wenn der Bot kurz nicht läuft. Ist der Pi über Nacht oder mehrere Tage aus, fehlt der Schutz ab dem nächsten Handelstag.

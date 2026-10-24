@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+- Neue Option `monthly_deposit`: monatliche Einzahlung, wird zum Kapital addiert (Gewinne werden weiter mit eingesetzt). Der SPY-Vergleich bekommt dieselben Einzahlungen.
+- Backtest rechnet mit den Einzahlungen, Rendite bezogen auf das insgesamt Eingezahlte.
+- Backtest-Varianten mit 2x-Hebel (täglich angepasst wie ein Faktor-Zertifikat, 4 % Kosten pro Jahr).
+
 ## 0.3.1
 - Backtest vergleicht 9 Varianten (Stops, Trendlänge, Handelshäufigkeit, Positionsgröße): Zeitraum A zum Vergleichen, das letzte Jahr B zum Gegenprüfen.
 

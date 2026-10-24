@@ -22,6 +22,7 @@ def main() -> int:
         "TRADINGBOT_START_BUDGET": str(opts.get("start_budget", 300)),
         "TRADINGBOT_DB_PATH": "/data/tradingbot.db",
         "TRADINGBOT_NOTIFY_SERVICE": opts.get("notify_service", ""),
+        "TRADINGBOT_MONTHLY_DEPOSIT": str(opts.get("monthly_deposit", "")),
     }
     if opts.get("anthropic_api_key"):
         env["TRADINGBOT_SENTIMENT"] = "claude"
