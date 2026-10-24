@@ -248,7 +248,7 @@ def test_variants_compare_two_periods():
                 for p in [100 * math.exp(k * i)]] for s, k in (("UP", 0.002), ("SPY", 0.001))}
     cfg = Config(watchlist=["UP"])
     res = run_variants(cfg, bars, date(2023, 10, 1), date(2024, 6, 1), date(2024, 12, 1))
-    assert [r["name"] for r in res] == [n for n, _ in VARIANTS + LEVERAGED]
+    assert [r["name"] for r in res] == [n for n, _ in VARIANTS] + [n for n, _, _ in LEVERAGED]
     assert all(r["train"]["end"] <= date(2024, 6, 1) <= r["test"]["start"] for r in res)
     assert cfg.strategy.sma_slow == 30  # Varianten ändern die echte Konfiguration nicht
     assert len(format_variants(res)) == 3 + len(VARIANTS) + len(LEVERAGED)

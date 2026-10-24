@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3
+- Backtest: aggressive Varianten (Trendfolger mit 3 großen Positionen, ohne Cash-Reserve, Not-Aus erst bei 50 %), auch mit 2x- und 3x-Hebel.
+- Not-Aus im Backtest füllt nicht mehr das Protokoll.
+
 ## 0.3.2
 - Neue Option `monthly_deposit`: monatliche Einzahlung, wird zum Kapital addiert (Gewinne werden weiter mit eingesetzt). Der SPY-Vergleich bekommt dieselben Einzahlungen.
 - Backtest rechnet mit den Einzahlungen, Rendite bezogen auf das insgesamt Eingezahlte.

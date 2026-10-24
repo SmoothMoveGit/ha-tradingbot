@@ -127,10 +127,18 @@ VARIANTS: list[tuple[str, dict]] = [
     ("8 kleinere Positionen", {"risk": {"max_positions": 8, "max_position_pct": 0.11}}),
     ("nur Signal, keine Stops", {"risk": {"stop_loss_pct": 0.99, "trailing_stop_pct": 0.99, "take_profit_pct": 10.0}}),
 ]
+_TREND = dict(VARIANTS)["Trendfolger 50/200"]
+# Aggressiv: alles investiert, 3 große Positionen, Not-Aus erst bei 50 % Rückgang.
+_AGGRO = {"strategy": _TREND["strategy"],
+          "risk": {**_TREND["risk"], "max_positions": 3, "max_position_pct": 0.34, "min_cash_reserve_pct": 0.0,
+                   "daily_loss_limit_pct": 0.10, "max_drawdown_pct": 0.50}}
+VARIANTS.append(("aggressiv (Trendfolger, 3 Pos.)", _AGGRO))
 # Hebel wie bei Faktor-Zertifikaten: tägliche Kursänderung mal Faktor, dazu laufende Kosten.
-LEVERAGED: list[tuple[str, dict]] = [
-    ("Hebel 2x, aktuell", {}),
-    ("Hebel 2x, Trendfolger 50/200", dict(VARIANTS)["Trendfolger 50/200"]),
+LEVERAGED: list[tuple[str, dict, float]] = [
+    ("Hebel 2x, aktuell", {}, 2.0),
+    ("Hebel 2x, Trendfolger 50/200", _TREND, 2.0),
+    ("Hebel 2x, aggressiv", _AGGRO, 2.0),
+    ("Hebel 3x, aggressiv", _AGGRO, 3.0),
 ]
 LEVERAGE, LEVERAGE_COST = 2.0, 0.04  # Faktor, Kosten pro Jahr (Finanzierung, Spread)
 WARMUP_DAYS = 300  # Kurse vor dem Teststart, damit auch lange Durchschnitte (200 Tage) bereitstehen
@@ -147,9 +155,10 @@ def leveraged(bars: list[Bar], factor: float = LEVERAGE, cost: float = LEVERAGE_
 
 def run_variants(cfg, bars: dict[str, list[Bar]], start: date, cut: date, end: date) -> list[dict]:
     """Jede Variante zweimal: Vergleichszeitraum (start..cut) und Prüfjahr (cut..end), je mit frischem Budget."""
-    lev_bars = {s: (b if s == cfg.benchmark else leveraged(b)) for s, b in bars.items()}
+    lev = {f: {s: (b if s == cfg.benchmark else leveraged(b, f)) for s, b in bars.items()}
+           for f in {f for _, _, f in LEVERAGED}}
     results = []
-    for name, overrides, data in [(n, o, bars) for n, o in VARIANTS] + [(n, o, lev_bars) for n, o in LEVERAGED]:
+    for name, overrides, data in [(n, o, bars) for n, o in VARIANTS] + [(n, o, lev[f]) for n, o, f in LEVERAGED]:
         vcfg = _merge(copy.deepcopy(cfg), overrides)
         a = run_backtest(vcfg, data, start, cut)
         b = run_backtest(vcfg, data, cut, end)
