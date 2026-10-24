@@ -1,6 +1,6 @@
 .env
-config.yaml
-data/
+/tradingbot/app/config.yaml
+/tradingbot/app/data/
 __pycache__/
 .venv/
 .pytest_cache/

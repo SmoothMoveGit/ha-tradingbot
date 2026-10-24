@@ -1,0 +1,27 @@
+name: Tradingbot
+version: "0.2.2"
+slug: tradingbot
+description: Autonomer Aktien-Tradingbot mit Nachrichtenanalyse (startet im Paper-Modus)
+url: https://github.com/SmoothMoveGit/ha-tradingbot
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: application
+boot: auto
+homeassistant_api: true
+map:
+  - app_config:rw
+options:
+  alpaca_api_key: ""
+  alpaca_secret_key: ""
+  mode: paper
+  start_budget: 300
+schema:
+  alpaca_api_key: password
+  alpaca_secret_key: password
+  mode: list(paper|live|sim)
+  start_budget: float(10,)
+  notify_service: str?
+  anthropic_api_key: password?
+  live_confirmation: str?
