@@ -8,7 +8,7 @@ from pathlib import Path
 
 OPTIONS = Path("/data/options.json")
 CONFIG = Path("/config/config.yaml")  # im HA-Ordner addon_configs/<slug>_tradingbot/
-EXAMPLE = Path(__file__).resolve().parent.parent / "config.example.yaml"
+EXAMPLE = Path(__file__).resolve().parent.parent / "settings.example.yaml"
 LIVE_PHRASE = "ja-ich-kenne-das-risiko"
 
 

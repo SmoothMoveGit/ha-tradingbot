@@ -43,7 +43,7 @@ Ohne Konto ausprobieren: `python -m tradingbot sim --days 120` (Zufallskurse, of
 
 ## Konfiguration
 
-Alles steht in `config.yaml` (Vorlage: `config.example.yaml`): Watchlist, Budget, Risiko-Grenzen,
+Alles steht in `config.yaml` (Vorlage: `settings.example.yaml`): Watchlist, Budget, Risiko-Grenzen,
 Gewichtung von Trend und Nachrichten, RSS-Feeds. Schlüssel gehören nur in `.env`.
 
 Bessere Nachrichtenbewertung: `sentiment_engine: claude` und `ANTHROPIC_API_KEY` in `.env`.
