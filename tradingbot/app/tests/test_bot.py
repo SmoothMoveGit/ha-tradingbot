@@ -236,3 +236,19 @@ def test_sell_by_broker_stop_is_recorded():
     t = bot.storage.recent_trades(5)
     assert any(x[2] == "sell" and "Broker" in x[6] for x in t)
     assert bot.storage.realized_pnl() < 0
+
+
+def test_variants_compare_two_periods():
+    import math
+    from datetime import date, datetime, timedelta, timezone
+    from tradingbot.backtest import VARIANTS, format_variants, run_variants
+    from tradingbot.broker.base import Bar
+    t0 = datetime(2023, 1, 2, tzinfo=timezone.utc)
+    bars = {s: [Bar(t0 + timedelta(days=i), p, p, p, p, 1) for i in range(700)
+                for p in [100 * math.exp(k * i)]] for s, k in (("UP", 0.002), ("SPY", 0.001))}
+    cfg = Config(watchlist=["UP"])
+    res = run_variants(cfg, bars, date(2023, 10, 1), date(2024, 6, 1), date(2024, 12, 1))
+    assert [r["name"] for r in res] == [n for n, _ in VARIANTS]
+    assert all(r["train"]["end"] <= date(2024, 6, 1) <= r["test"]["start"] for r in res)
+    assert cfg.strategy.sma_slow == 30  # Varianten ändern die echte Konfiguration nicht
+    assert len(format_variants(res)) == 3 + len(VARIANTS)

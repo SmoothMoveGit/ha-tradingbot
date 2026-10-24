@@ -11,6 +11,7 @@ import logging
 from datetime import date
 
 from .bot import TradingBot
+from .config import _merge
 from .broker.base import Bar
 from .broker.sim import SimBroker
 from .storage import Storage
@@ -38,7 +39,7 @@ class HistoricalBroker(SimBroker):
         return self.history[symbol][-days:]
 
 
-def run_backtest(cfg, bars: dict[str, list[Bar]]) -> dict:
+def run_backtest(cfg, bars: dict[str, list[Bar]], start: date | None = None, end: date | None = None) -> dict:
     cfg = copy.deepcopy(cfg)
     cfg.mode = "sim"
     cfg.news.use_alpaca_news = False
@@ -51,7 +52,7 @@ def run_backtest(cfg, bars: dict[str, list[Bar]]) -> dict:
     bot = TradingBot(cfg, broker, Storage(":memory:"))
     bench = cfg.benchmark if cfg.benchmark in broker.full else None
     calendar = broker.days[bench] if bench else sorted({d for ds in broker.days.values() for d in ds})
-    days = calendar[cfg.strategy.sma_slow + 5:]
+    days = [d for d in calendar[cfg.strategy.sma_slow + 5:] if (not start or d >= start) and (not end or d <= end)]
     if not days:
         raise ValueError("zu wenig Kursdaten für einen Backtest")
 
@@ -98,4 +99,48 @@ def format_result(r: dict) -> list[str]:
         diff = r["return_pct"] - r["benchmark_return_pct"]
         lines.append(f"  Vergleich {r['benchmark']} halten: {r['benchmark_return_pct']:+.1%} "
                      f"-> Bot {'besser' if diff >= 0 else 'schlechter'} um {abs(diff):.1%}-Punkte")
+    return lines
+
+
+# Varianten für den Vergleich. Jede ändert nur die genannten Einstellungen gegenüber der aktuellen config.
+VARIANTS: list[tuple[str, dict]] = [
+    ("aktuell", {}),
+    ("weite Stops", {"risk": {"stop_loss_pct": 0.10, "trailing_stop_pct": 0.12, "take_profit_pct": 0.30}}),
+    ("ohne Gewinnmitnahme", {"risk": {"take_profit_pct": 10.0, "trailing_stop_pct": 0.10}}),
+    ("langer Trend 20/50", {"strategy": {"sma_fast": 20, "sma_slow": 50}}),
+    ("langer Trend + weite Stops", {"strategy": {"sma_fast": 20, "sma_slow": 50},
+                                    "risk": {"stop_loss_pct": 0.10, "trailing_stop_pct": 0.12, "take_profit_pct": 0.30}}),
+    ("Trendfolger 50/200", {"strategy": {"sma_fast": 50, "sma_slow": 200, "sell_threshold": -0.1},
+                            "risk": {"stop_loss_pct": 0.15, "trailing_stop_pct": 0.15, "take_profit_pct": 10.0}}),
+    ("weniger Trades", {"strategy": {"buy_threshold": 0.5, "sell_threshold": -0.4},
+                        "risk": {"rebuy_cooldown_days": 5}}),
+    ("8 kleinere Positionen", {"risk": {"max_positions": 8, "max_position_pct": 0.11}}),
+    ("nur Signal, keine Stops", {"risk": {"stop_loss_pct": 0.99, "trailing_stop_pct": 0.99, "take_profit_pct": 10.0}}),
+]
+WARMUP_DAYS = 300  # Kurse vor dem Teststart, damit auch lange Durchschnitte (200 Tage) bereitstehen
+
+
+def run_variants(cfg, bars: dict[str, list[Bar]], start: date, cut: date, end: date) -> list[dict]:
+    """Jede Variante zweimal: Vergleichszeitraum (start..cut) und Prüfjahr (cut..end), je mit frischem Budget."""
+    results = []
+    for name, overrides in VARIANTS:
+        vcfg = _merge(copy.deepcopy(cfg), overrides)
+        a = run_backtest(vcfg, bars, start, cut)
+        b = run_backtest(vcfg, bars, cut, end)
+        results.append({"name": name, "train": a, "test": b})
+    return results
+
+
+def format_variants(results: list[dict]) -> list[str]:
+    a, b = results[0]["train"], results[0]["test"]
+    lines = [
+        "VARIANTEN (nur Trend + Risikoregeln, ohne Nachrichten, je 300 $ Start)",
+        f"  Zeitraum A {a['start']} bis {a['end']} | Prüfjahr B {b['start']} bis {b['end']}",
+        f"  {'SPY halten':28} A {a['benchmark_return_pct']:+7.1%}            | B {b['benchmark_return_pct']:+7.1%}",
+    ]
+    for r in sorted(results, key=lambda r: -r["train"]["return_pct"]):
+        x, y = r["train"], r["test"]
+        lines.append(f"  {r['name']:28} A {x['return_pct']:+7.1%} (Rückg. {x['max_drawdown_pct']:4.0%}, "
+                     f"{x['trades']:3d} Tr.) | B {y['return_pct']:+7.1%} (Rückg. {y['max_drawdown_pct']:4.0%})"
+                     + (" NOT-AUS" if x["halted"] or y["halted"] else ""))
     return lines

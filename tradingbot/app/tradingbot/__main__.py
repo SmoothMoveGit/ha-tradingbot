@@ -16,6 +16,7 @@ def main(argv=None) -> int:
     p.add_argument("-c", "--config", default="config.yaml")
     p.add_argument("--days", type=int, default=90, help="Tage für 'sim'")
     p.add_argument("--years", type=float, default=3, help="Jahre für 'backtest'")
+    p.add_argument("--variants", action="store_true", help="'backtest': mehrere Einstellungen vergleichen")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
 
@@ -36,7 +37,7 @@ def main(argv=None) -> int:
     if args.command == "sim":
         return simulate(cfg, args.days)
     if args.command == "backtest":
-        return backtest(cfg, args.years)
+        return backtest(cfg, args.years, args.variants)
 
     from .bot import TradingBot
     if cfg.mode == "live":
@@ -66,19 +67,25 @@ def status(cfg) -> int:
     return 0
 
 
-def backtest(cfg, years: float) -> int:
+def backtest(cfg, years: float, variants: bool = False) -> int:
     """Regeln gegen echte Alpaca-Tageskurse der letzten Jahre testen."""
     from datetime import datetime, timedelta, timezone
 
-    from .backtest import format_result, run_backtest
+    from .backtest import WARMUP_DAYS, format_result, format_variants, run_backtest, run_variants
     from .broker.alpaca import AlpacaBroker
     broker = AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)
-    start = datetime.now(timezone.utc) - timedelta(days=int(365 * years) + 60)
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=int(365 * years))
     symbols = list(dict.fromkeys(cfg.watchlist + ([cfg.benchmark] if cfg.benchmark else [])))
     logging.getLogger(__name__).info("Backtest: lade Tageskurse für %d Werte seit %s", len(symbols), start.date())
-    result = run_backtest(cfg, broker.history(symbols, start))
-    for line in format_result(result):
-        logging.getLogger("tradingbot.backtest").info(line)
+    bars = broker.history(symbols, start - timedelta(days=WARMUP_DAYS * 1.5))
+    out = logging.getLogger("tradingbot.backtest")
+    for line in format_result(run_backtest(cfg, bars, start.date())):
+        out.info(line)
+    if variants:
+        cut = (end - timedelta(days=365)).date()
+        for line in format_variants(run_variants(cfg, bars, start.date(), cut, end.date())):
+            out.info(line)
     return 0
 
 

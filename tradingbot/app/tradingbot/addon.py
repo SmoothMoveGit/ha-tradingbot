@@ -38,7 +38,7 @@ def main() -> int:
     marker = OPTIONS.parent / f"backtest-{os.getenv('TRADINGBOT_VERSION', 'dev')}.done"
     if env["TRADINGBOT_MODE"] != "sim" and not marker.exists():
         try:  # einmal pro Version: Regeln gegen echte Kurse prüfen, Ergebnis steht im Protokoll
-            cli(["backtest", "-c", str(CONFIG)])
+            cli(["backtest", "--variants", "-c", str(CONFIG)])
             marker.touch()
         except Exception as e:
             print(f"Backtest fehlgeschlagen: {e}", flush=True)
