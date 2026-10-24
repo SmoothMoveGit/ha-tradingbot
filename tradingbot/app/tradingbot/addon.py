@@ -36,7 +36,8 @@ def main() -> int:
         print(f"Neue Konfiguration angelegt: {CONFIG} (Watchlist und Risiko dort anpassbar)", flush=True)
 
     from .__main__ import main as cli
-    marker = OPTIONS.parent / f"backtest-{os.getenv('TRADINGBOT_VERSION', 'dev')}.done"
+    # neu testen bei neuer Version oder geänderter Einzahlung
+    marker = OPTIONS.parent / f"backtest-{os.getenv('TRADINGBOT_VERSION', 'dev')}-{os.getenv('TRADINGBOT_MONTHLY_DEPOSIT') or 0}.done"
     if env["TRADINGBOT_MODE"] != "sim" and not marker.exists():
         try:  # einmal pro Version: Regeln gegen echte Kurse prüfen, Ergebnis steht im Protokoll
             cli(["backtest", "--variants", "-c", str(CONFIG)])
