@@ -36,6 +36,9 @@ class StrategyConfig:
     buy_threshold: float = 0.35
     sell_threshold: float = -0.25
     panic_news_threshold: float = -0.6    # sehr schlechte Nachricht -> sofort verkaufen
+    panic_needs_confirmation: bool = False  # nur verkaufen, wenn die Nachrichtenlage insgesamt schlecht ist ...
+    panic_confirm_score: float = -0.3     # ... (Durchschnitt der Nachrichten) ...
+    panic_severe_threshold: float = -0.85  # ... oder die Nachricht wirklich verheerend ist
     news_lookback_hours: int = 24
     news_half_life_hours: float = 6.0
     market_news_weight: float = 0.3       # Einfluss allgemeiner Weltnachrichten
@@ -99,7 +102,7 @@ def load_env_file(path: str | Path = ".env") -> None:
 
 
 # Fertige Strategie-Profile (Add-on-Option "Strategie"). Getestet im Backtest, siehe backtest.VARIANTS.
-_TREND_STRATEGY = {"sma_fast": 50, "sma_slow": 200, "sell_threshold": -0.1}
+_TREND_STRATEGY = {"sma_fast": 50, "sma_slow": 200, "sell_threshold": -0.1, "panic_needs_confirmation": True}
 _TREND_STOPS = {"stop_loss_pct": 0.15, "trailing_stop_pct": 0.15, "take_profit_pct": 10.0}
 PROFILES: dict[str, dict] = {
     "standard": {},

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.2
+- Strategien `trendfolger` und `aggressiv`: Eine einzelne schlechte Schlagzeile löst keinen Notverkauf mehr aus. Verkauft wird nur, wenn die Nachrichtenlage insgesamt schlecht ist (Schnitt ≤ −0,3) oder die Meldung verheerend (≤ −0,85).
+
 ## 0.4.1
 - Vergleich jetzt mit dem MSCI World (US-ETF URTH) statt dem S&P 500. Neuer Sensor `sensor.tradingbot_vergleich_etf` ersetzt `sensor.tradingbot_vergleich_sp500`; der Vergleich startet neu.
 

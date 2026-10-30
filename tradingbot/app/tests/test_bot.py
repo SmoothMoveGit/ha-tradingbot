@@ -285,3 +285,16 @@ def test_strategy_profile_from_env(monkeypatch):
     monkeypatch.setenv("TRADINGBOT_PROFILE", "aggressiv")
     cfg = load_config(None)
     assert cfg.risk.max_positions == 3 and cfg.risk.max_drawdown_pct == 0.5 and cfg.strategy.sma_slow == 200
+
+
+def test_trend_profile_needs_confirmed_bad_news():
+    bot, _ = make_bot()
+    bot.cfg.strategy.panic_needs_confirmation = True
+    cases = [(-0.7, 0.1, False), (-0.7, -0.4, True), (-0.9, 0.1, True), (-0.3, -0.9, False)]
+    for shock, avg, expected in cases:
+        bot.news.latest_shock = lambda sym, s=shock: s
+        bot.news.score = lambda sym, a=avg: a
+        assert bot._news_panic("AAA") is expected
+    bot.cfg.strategy.panic_needs_confirmation = False
+    bot.news.latest_shock, bot.news.score = (lambda sym: -0.7), (lambda sym: 0.1)
+    assert bot._news_panic("AAA") is True

@@ -123,6 +123,16 @@ class TradingBot:
             self.storage.set(f"benchmark_deposits_{sym}", self.risk.deposits())
         return self.cfg.risk.start_budget * price / float(start) + units * price
 
+    def _news_panic(self, sym: str) -> bool:
+        """Panik-Verkauf? Bei Trend-Strategien reicht eine einzelne schlechte Schlagzeile nicht."""
+        st = self.cfg.strategy
+        shock = self.news.latest_shock(sym)
+        if shock > st.panic_news_threshold:
+            return False
+        if not st.panic_needs_confirmation or shock <= st.panic_severe_threshold:
+            return True
+        return self.news.score(sym) <= st.panic_confirm_score
+
     def _cycle(self, today: date) -> None:
         if self.risk.halted:
             self.status = "Not-Aus"
@@ -166,7 +176,7 @@ class TradingBot:
         for sym, pos in positions.items():
             high = self.storage.update_high(sym, pos.current_price)
             reason = self.risk.exit_reason(pos.pnl_pct, pos.current_price, high)
-            if not reason and self.news.latest_shock(sym) <= st.panic_news_threshold:
+            if not reason and self._news_panic(sym):
                 reason = "sehr negative Nachricht"
             sig = signals.get(sym)
             if not reason and sig and sig.score <= st.sell_threshold:
