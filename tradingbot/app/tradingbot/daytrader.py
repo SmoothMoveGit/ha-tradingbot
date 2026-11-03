@@ -263,10 +263,15 @@ def backtest(cfg: DayConfig, bars: dict[str, list[Bar]]) -> dict:
     times = sorted({b.time + timedelta(minutes=5) for bs in bars.values() for b in bs
                     if (9, 30) <= (b.time.astimezone(NY).hour, b.time.astimezone(NY).minute) < (16, 0)})
     days = set()
-    for t in times:
-        days.add(t.astimezone(NY).date())
-        sim.set_time(t)
-        bot.cycle(t)
+    level = log.level
+    log.setLevel(logging.WARNING)  # Backtest-Trades nicht ins Protokoll, sonst sehen sie echt aus
+    try:
+        for t in times:
+            days.add(t.astimezone(NY).date())
+            sim.set_time(t)
+            bot.cycle(t)
+    finally:
+        log.setLevel(level)
     trades = bot.storage.db.execute("SELECT pnl FROM trades WHERE side='sell'").fetchall()
     wins = sum(1 for (p,) in trades if p > 0)
     return {"start": cfg.start_budget, "end": bot.capital(), "days": len(days), "trades": len(trades),

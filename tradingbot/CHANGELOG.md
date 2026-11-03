@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.1
+- Daytrader-Backtest schreibt seine simulierten Käufe und Verkäufe nicht mehr ins Protokoll.
+
 ## 0.6.0
 - Zweiter Bot zum Vergleich: Daytrader (nur Spielgeld, eigenes Alpaca-Paper-Konto). Kauft Ausbrüche auf 5-Minuten-Kursen, bis zu 5 Aktien, verkauft bei +1,5 % oder -1 % und ist zum Handelsschluss immer komplett draußen. Beim Start Backtest über die letzten 30 Tage. Sensoren `sensor.daytrader_*`.
 
