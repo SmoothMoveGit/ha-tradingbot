@@ -45,6 +45,12 @@ def fetch_rss(feeds: list[str], since: datetime) -> list[dict]:
     return items
 
 
+def related_symbols(item: dict, watchlist: list[str], related: dict[str, list[str]]) -> list[str]:
+    """Watchlist-Aktien, deren Partnerfirma (Zulieferer, Kunde, Konkurrent) in der Nachricht vorkommt."""
+    tagged = set(item.get("symbols", []))
+    return [sym for sym in watchlist if sym not in tagged and tagged & set(related.get(sym, []))]
+
+
 def tag_symbols(item: dict, watchlist: list[str], aliases: dict[str, list[str]]) -> list[str]:
     """Ordnet eine Nachricht Aktien zu (über Ticker oder Firmennamen). Ohne Treffer: Gesamtmarkt."""
     syms = [s for s in item.get("symbols", []) if s in watchlist]
@@ -67,15 +73,32 @@ class NewsAnalyzer:
     def refresh(self) -> int:
         """Neue Nachrichten holen, bewerten, speichern. Gibt Anzahl neuer Artikel zurück."""
         since = datetime.now(timezone.utc) - timedelta(hours=self.cfg.strategy.news_lookback_hours)
+        wl, related = self.cfg.watchlist, self.cfg.related
         items: list[dict] = []
         if self.cfg.news.use_alpaca_news:
-            items += self.broker.fetch_news(self.cfg.watchlist, since)
+            partners = sorted({p for s in wl for p in related.get(s, [])} - set(wl))
+            items += self.broker.fetch_news(wl + partners, since, self.cfg.news.max_alpaca_news)
         items += fetch_rss(self.cfg.news.rss_feeds, since)
-        new = [i for i in items if not self.storage.has_news(i["id"])]
-        scores = self.engine.score_many([f"{i['headline']}. {i['summary']}" for i in new])
-        for item, score in zip(new, scores):
-            for sym in tag_symbols(item, self.cfg.watchlist, self.cfg.aliases):
+        new = list({i["id"]: i for i in items if not self.storage.has_news(i["id"])}.values())
+        texts = [f"{i['headline']}. {i['summary']}" for i in new]
+        companies = {s: (self.cfg.aliases.get(s) or [s])[0] for s in wl}
+        impacts = self.engine.impacts_many(texts, companies, related, MARKET)
+        if impacts is None:  # Lexikon: direkt genannte Firmen voll, Partnerfirmen abgeschwächt
+            impacts = []
+            for item, score in zip(new, self.engine.score_many(texts)):
+                effects = {s: score for s in tag_symbols(item, wl, self.cfg.aliases)}
+                for s in related_symbols(item, wl, related):
+                    effects.setdefault(s, score * self.cfg.news.related_weight)
+                if MARKET in effects and len(effects) > 1:
+                    del effects[MARKET]
+                impacts.append(effects)
+        for item, effects in zip(new, impacts):
+            firms = {s: v for s, v in effects.items() if s != MARKET and v}
+            for sym, score in firms.items():
                 self.storage.add_news(item, sym, score)
+            market = effects.get(MARKET, 0.0)
+            if not firms or abs(market) >= 0.5:  # reine Weltnachricht oder großes Ereignis
+                self.storage.add_news(item, MARKET, market)
         if new:
             log.info("%d neue Nachrichten bewertet", len(new))
         return len(new)

@@ -69,7 +69,7 @@ class Broker(ABC):
     @abstractmethod
     def sell_all(self, symbol: str) -> Fill | None: ...
 
-    def fetch_news(self, symbols: list[str], since: datetime) -> list[dict]:
+    def fetch_news(self, symbols: list[str], since: datetime, limit: int = 500) -> list[dict]:
         return []
 
     # Schutz beim Broker (greift auch, wenn der Bot nicht läuft). Standard: nicht unterstützt.

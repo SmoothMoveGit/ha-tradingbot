@@ -139,9 +139,9 @@ class AlpacaBroker(Broker):
             return None
         return Fill(symbol, "sell", float(o.filled_qty), float(o.filled_avg_price))
 
-    def fetch_news(self, symbols: list[str], since: datetime) -> list[dict]:
+    def fetch_news(self, symbols: list[str], since: datetime, limit: int = 500) -> list[dict]:
         try:
-            res = self.news.get_news(NewsRequest(symbols=",".join(symbols), start=since, limit=50))
+            res = self.news.get_news(NewsRequest(symbols=",".join(symbols), start=since, limit=limit))
         except APIError as e:
             log.warning("Alpaca-News nicht abrufbar: %s", e)
             return []

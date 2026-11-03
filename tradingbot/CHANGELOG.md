@@ -1,6 +1,13 @@
 # Changelog
 
 ## 0.5.0
+- Claude bewertet jede Nachricht für alle Aktien der Watchlist, auch indirekt: Probleme bei Zulieferern, Kunden oder Konkurrenten wirken auf die eigene Aktie (meist schwächer).
+- Nachrichten von Partnerfirmen werden mitgeholt (z.B. TSMC für Apple und Nvidia). Liste unter `related` in `config.yaml`, sonst eingebaute Standardliste.
+- Bis zu 500 statt 50 Alpaca-Meldungen pro Abruf.
+- Keine neuen Käufe in den 2 Tagen vor Quartalszahlen (Termine aus dem öffentlichen Nasdaq-Kalender; ist er nicht erreichbar, läuft der Bot normal weiter).
+- Claude denkt bei der Bewertung nur kurz nach (geringere Kosten).
+
+## 0.5.0
 - Mehr Sensoren für das Home-Assistant-Dashboard „Aktien“: `sensor.tradingbot_unrealisiert` (offener Gewinn), `_bargeld`, `_rendite` (in % aufs Eingezahlte), `_heute` (Tagesänderung), `_drawdown` (Abstand zum Höchststand, mit Not-Aus-Grenze und Stop-Werten), `_marktstimmung` (Nachrichtenlage mit Schlagzeilen und Signalen je Aktie) und `_trades` (Anzahl, letzte 10 Trades).
 - `sensor.tradingbot_positionen` hat jetzt das Attribut `details` (Stück, Einstand, Kurs, Wert, Gewinn je Aktie), `sensor.tradingbot_status` zusätzlich Strategie, Watchlist und Zeit des letzten Laufs.
 

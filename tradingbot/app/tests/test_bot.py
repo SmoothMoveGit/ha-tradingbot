@@ -322,3 +322,49 @@ def test_trend_profile_needs_confirmed_bad_news():
     bot.cfg.strategy.panic_needs_confirmation = False
     bot.news.latest_shock, bot.news.score = (lambda sym: -0.7), (lambda sym: 0.1)
     assert bot._news_panic("AAA") is True
+
+
+def test_partner_news_counts_for_watchlist_stock():
+    from tradingbot.news import MARKET, related_symbols
+    bot, _ = make_bot(symbols=("AAPL",))
+    bot.cfg.related = {"AAPL": ["TSM"]}
+    bot.cfg.news.use_alpaca_news = True
+    item = {"id": "x", "time": datetime.now(timezone.utc), "headline": "TSMC plunges after fraud probe",
+            "summary": "", "symbols": ["TSM"]}
+    assert related_symbols(item, ["AAPL"], bot.cfg.related) == ["AAPL"]
+    bot.broker.fetch_news = lambda syms, since, limit=500: [item] if "TSM" in syms else []
+    bot.news.refresh()
+    rows = bot.storage.news_scores("AAPL", datetime.now(timezone.utc) - timedelta(hours=1))
+    assert rows and rows[0][1] < 0 and rows[0][1] > lexicon_score(item["headline"])  # abgeschwächt
+    assert not bot.storage.news_scores(MARKET, datetime.now(timezone.utc) - timedelta(hours=1))
+
+
+def test_claude_impacts_are_stored_per_stock():
+    from tradingbot.news import MARKET
+    bot, _ = make_bot(symbols=("AAPL", "KO"))
+    bot.cfg.news.use_alpaca_news = True
+    item = {"id": "y", "time": datetime.now(timezone.utc), "headline": "Chip shortage hits suppliers",
+            "summary": "", "symbols": []}
+    bot.broker.fetch_news = lambda syms, since, limit=500: [item]
+    bot.news.engine.impacts_many = lambda texts, c, r, m: [{"AAPL": -0.4, MARKET: -0.6}]
+    bot.news.refresh()
+    since = datetime.now(timezone.utc) - timedelta(hours=1)
+    assert bot.storage.news_scores("AAPL", since)[0][1] == -0.4
+    assert bot.storage.news_scores(MARKET, since)[0][1] == -0.6  # großes Ereignis zählt auch für den Markt
+    assert not bot.storage.news_scores("KO", since)
+
+
+def test_earnings_calendar_caches_and_survives_errors():
+    from datetime import date
+    from tradingbot.earnings import EarningsCalendar
+    calls = []
+    def fetch(d):
+        calls.append(d)
+        return ["AAPL", "XYZ"] if d == date(2026, 11, 4) else []
+    cal = EarningsCalendar(Storage(":memory:"), fetch)
+    assert cal.upcoming(["AAPL", "KO"], date(2026, 11, 3), 2) == {"AAPL": date(2026, 11, 4)}
+    assert cal.upcoming(["AAPL", "KO"], date(2026, 11, 3), 2) == {"AAPL": date(2026, 11, 4)}
+    assert len(calls) == 3  # zweiter Aufruf aus dem Zwischenspeicher
+    def broken(d):
+        raise OSError("kein Netz")
+    assert EarningsCalendar(Storage(":memory:"), broken).upcoming(["AAPL"], date(2026, 11, 3), 2) == {}

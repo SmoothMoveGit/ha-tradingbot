@@ -6,6 +6,8 @@ import os
 import time
 from datetime import date, datetime
 
+from .broker.sim import SimBroker
+from .earnings import EarningsCalendar
 from .homeassistant import Reporter
 from .news import MARKET, NewsAnalyzer
 from .risk import RiskManager
@@ -26,6 +28,8 @@ class TradingBot:
         self.storage = storage or Storage(cfg.db_path)
         self.risk = RiskManager(cfg, self.storage)
         self.news = NewsAnalyzer(cfg, self.storage, broker)
+        # Termine nur im echten Betrieb (im Backtest wären es heutige Termine, nicht die damaligen)
+        self.earnings = None if isinstance(broker, SimBroker) else EarningsCalendar(self.storage)
         self.signals = {}
 
     def _own_positions(self):
@@ -259,10 +263,15 @@ class TradingBot:
                 ),
                 key=lambda s: s.score, reverse=True,
             )
+            soon = self.earnings.upcoming(self.cfg.watchlist, today, self.cfg.news.earnings_guard_days) \
+                if self.earnings and candidates else {}
             for sig in candidates:
                 if len(meta) >= self.cfg.risk.max_positions:
                     break
                 if self.news.latest_shock(sig.symbol) <= st.panic_news_threshold:
+                    continue
+                if sig.symbol in soon:  # Kurs springt bei Quartalszahlen oft stark, erst danach einsteigen
+                    log.info("Kein Kauf %s: Quartalszahlen am %s", sig.symbol, f"{soon[sig.symbol]:%d.%m.}")
                     continue
                 amount = self.risk.position_size(sum(meta.values()), self.broker.account().cash)
                 if not amount:

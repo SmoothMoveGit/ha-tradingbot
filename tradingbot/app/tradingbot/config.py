@@ -50,6 +50,23 @@ class NewsConfig:
     rss_feeds: list[str] = field(default_factory=list)
     sentiment_engine: str = "lexicon"     # "lexicon" oder "claude"
     claude_model: str = "claude-haiku-5-5"
+    max_alpaca_news: int = 500            # pro Abruf (Alpaca liefert seitenweise zu je 50)
+    related_weight: float = 0.5           # Lexikon: Nachricht über Partnerfirma zählt halb
+    earnings_guard_days: int = 2          # so viele Tage vor Quartalszahlen keine neuen Käufe
+
+
+DEFAULT_RELATED: dict[str, list[str]] = {
+    "AAPL": ["TSM", "QCOM", "AVGO", "SWKS", "GOOGL"],
+    "MSFT": ["NVDA", "AMD", "ORCL", "CRM"],
+    "NVDA": ["TSM", "ASML", "MU", "AMD", "SMCI"],
+    "AMZN": ["WMT", "UPS", "FDX", "SHOP"],
+    "GOOGL": ["META", "MSFT", "TSM"],
+    "META": ["GOOGL", "SNAP", "PINS"],
+    "JPM": ["BAC", "C", "WFC", "GS"],
+    "V": ["MA", "PYPL", "AXP"],
+    "KO": ["PEP", "KDP"],
+    "JNJ": ["PFE", "MRK", "ABBV"],
+}
 
 
 @dataclass
@@ -58,6 +75,8 @@ class Config:
     interval_minutes: int = 15
     watchlist: list[str] = field(default_factory=lambda: ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL"])
     aliases: dict[str, list[str]] = field(default_factory=dict)
+    # Zulieferer, Kunden, Konkurrenten: deren Nachrichten werden mitgeholt und für die Aktie mitbewertet
+    related: dict[str, list[str]] = field(default_factory=lambda: dict(DEFAULT_RELATED))
     db_path: str = "data/tradingbot.db"
     benchmark: str = "URTH"               # Vergleich: einfach einen MSCI-World-ETF halten
     risk: RiskConfig = field(default_factory=RiskConfig)

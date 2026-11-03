@@ -42,6 +42,12 @@ Beim ersten Start jeder neuen Version testet der Bot seine Regeln gegen die echt
 
 Ist eine monatliche Einzahlung eingestellt, rechnet der Backtest sie mit ein. Die Rendite bezieht sich dann auf alles Eingezahlte, und der ETF-Vergleich kauft mit denselben Einzahlungen. Zwei Varianten testen einen 2x-Hebel (täglich angepasst wie ein Faktor-Zertifikat, 4 % Kosten pro Jahr). Das ist nur eine Näherung, kein echtes Derivat.
 
+## Nachrichten
+
+Alle 15 Minuten holt der Bot die Meldungen der letzten 24 Stunden: Alpaca-Nachrichten zu den Aktien der Watchlist und ihren Partnerfirmen (`related`) sowie die RSS-Feeds. Mit Anthropic-Schlüssel bewertet Claude jede Meldung für jede betroffene Aktie, auch indirekt über Zulieferer, Kunden und Konkurrenten, und zusätzlich für den Gesamtmarkt. Ohne Schlüssel zählt eine Meldung über eine Partnerfirma halb.
+
+Vor Quartalszahlen (Standard: 2 Tage) kauft der Bot die betroffene Aktie nicht neu.
+
 ## Strategie
 
 | Strategie | Trend | Stops | Positionen | Reserve | Not-Aus |

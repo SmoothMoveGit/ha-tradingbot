@@ -70,6 +70,53 @@ class SentimentEngine:
                 log.warning("Claude-Sentiment fehlgeschlagen (%s), nutze Lexikon.", e)
         return [lexicon_score(t) for t in texts]
 
+    def impacts_many(self, texts: list[str], companies: dict[str, str], related: dict[str, list[str]],
+                     market_key: str) -> list[dict[str, float]] | None:
+        """Wirkung jeder Nachricht auf die Watchlist-Aktien, auch indirekt (Zulieferer, Kunden, Konkurrenz).
+        Nur mit Claude; sonst None (dann ordnet der Aufrufer selbst zu)."""
+        if self.engine != "claude" or not texts:
+            return None
+        try:
+            out: list[dict[str, float]] = []
+            for i in range(0, len(texts), 40):
+                out += self._claude_impacts(texts[i:i + 40], companies, related, market_key)
+            return out
+        except Exception as e:
+            log.warning("Claude-Analyse fehlgeschlagen (%s), nutze einfache Zuordnung.", e)
+            return None
+
+    def _claude_impacts(self, texts, companies, related, market_key):
+        firms = "\n".join(
+            f"- {sym}: {name}" + (f" (verbunden mit: {', '.join(related[sym])})" if related.get(sym) else "")
+            for sym, name in companies.items()
+        )
+        numbered = "\n".join(f"{i}: {t[:400]}" for i, t in enumerate(texts))
+        prompt = (
+            "Du bewertest Finanznachrichten für einen Aktien-Bot. Er hält nur diese Aktien:\n" + firms + "\n\n"
+            "Gib für jede Nachricht an, wie sie den Kurs dieser Aktien in den nächsten Tagen beeinflusst, "
+            "von -1 (sehr negativ) bis 1 (sehr positiv). Berücksichtige auch indirekte Wirkungen: Probleme oder "
+            "Erfolge bei Zulieferern, Kunden, Partnern oder Konkurrenten, Branchentrends, Regulierung, Zölle. "
+            "Indirekte Wirkungen sind meist schwächer als direkte. Nenne nur Aktien, die wirklich betroffen sind. "
+            '"markt" ist die Wirkung auf den Gesamtmarkt (Konjunktur, Zinsen, Kriege, Krisen), sonst 0.\n'
+            'Antworte nur mit JSON: {"ergebnisse": [{"markt": zahl, "aktien": {"TICKER": zahl}}, ...]} '
+            "in derselben Reihenfolge wie die Nachrichten.\n\n" + numbered
+        )
+        msg = self._client.messages.create(
+            model=self.model, max_tokens=16000, output_config={"effort": "low"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = "".join(b.text for b in msg.content if b.type == "text")
+        results = json.loads(text[text.index("{"): text.rindex("}") + 1])["ergebnisse"]
+        if len(results) != len(texts):
+            raise ValueError("Anzahl der Bewertungen passt nicht")
+        clamp = lambda v: max(-1.0, min(1.0, float(v)))
+        out = []
+        for r in results:
+            effects = {s.upper(): clamp(v) for s, v in (r.get("aktien") or {}).items() if s.upper() in companies}
+            effects[market_key] = clamp(r.get("markt", 0))
+            out.append(effects)
+        return out
+
     def _claude_scores(self, texts: list[str]) -> list[float]:
         numbered = "\n".join(f"{i}: {t[:400]}" for i, t in enumerate(texts))
         prompt = (
@@ -79,7 +126,8 @@ class SentimentEngine:
             'Antworte nur mit JSON: {"scores": [zahl, ...]} in derselben Reihenfolge.\n\n' + numbered
         )
         msg = self._client.messages.create(
-            model=self.model, max_tokens=1024, messages=[{"role": "user", "content": prompt}]
+            model=self.model, max_tokens=4096, output_config={"effort": "low"},
+            messages=[{"role": "user", "content": prompt}]
         )
         text = "".join(b.text for b in msg.content if b.type == "text")
         scores = json.loads(text[text.index("{"): text.rindex("}") + 1])["scores"]
