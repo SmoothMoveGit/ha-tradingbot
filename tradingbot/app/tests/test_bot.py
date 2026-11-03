@@ -310,6 +310,20 @@ def test_extra_deposits_booked_once(tmp_path):
     assert rm.bot_capital() == cfg.risk.start_budget + 1000
 
 
+def test_top_up_after_deposit():
+    bot, broker = make_bot()
+    bot.run_cycle()
+    pct = bot.cfg.risk.max_position_pct
+    assert bot.storage.all_meta()["AAA"] == pytest.approx(1000 * pct)
+    bot.run_cycle()  # ohne neues Geld kein Nachkauf
+    assert len(bot.storage.recent_trades(10)) == 1
+    bot.cfg.risk.extra_deposits = 1000
+    broker.cash += 1000
+    bot.run_cycle()
+    assert bot.storage.all_meta()["AAA"] == pytest.approx(2000 * pct)
+    assert "Nachkauf" in bot.storage.recent_trades(1)[0][6]
+
+
 def test_leveraged_series_doubles_daily_moves():
     from datetime import datetime, timedelta, timezone
     from tradingbot.backtest import leveraged

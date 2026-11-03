@@ -22,6 +22,7 @@ class RiskConfig:
     daily_loss_limit_pct: float = 0.03    # Not-Aus für den Tag
     max_drawdown_pct: float = 0.25        # Not-Aus dauerhaft (manuell zurücksetzen)
     min_order_value: float = 10.0
+    top_up_min_gap_pct: float = 0.25     # Nachkauf erst, wenn Position so weit unter Zielgröße liegt
     rebuy_cooldown_days: int = 2          # nach Verkauf diese Aktie so lange nicht wieder kaufen
     monthly_deposit: float = 0.0          # Einzahlung pro Monat (USD), erhöht das Kapital des Bots
     extra_deposits: float = 0.0           # Sonderzahlungen insgesamt (USD), neuer Teil wird einmal gebucht

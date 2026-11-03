@@ -64,6 +64,10 @@ Option *Monatliche Einzahlung*: Der Betrag wird am Monatsanfang zum Kapital des 
 
 Option *Sonderzahlungen gesamt*: Summe aller Einmalzahlungen. Erhöhst du den Wert (z.B. von 0 auf 735), bucht der Bot die Differenz einmal zum Kapital. Der ETF-Vergleich kauft mit diesem Betrag am selben Tag nach, damit der Vergleich fair bleibt. Den Wert später nicht wieder senken, Auszahlungen werden nicht gebucht.
 
+## Nachkauf
+
+Sind alle Positionsplätze belegt, wird neues Geld (monatlich oder Sonderzahlung) in die gehaltenen Aktien gesteckt: Liegt eine Position mindestens 25 % unter ihrer Zielgröße und ist ihr Signal weiter positiv, kauft der Bot bis zur Zielgröße nach. Vor Quartalszahlen und nach sehr schlechten Nachrichten nicht.
+
 ## Stop-Order bei Alpaca
 
 Für jede Position liegt zusätzlich eine Stop-Order bei Alpaca. Sie gilt bis Handelsschluss und wird jeden Handelstag erneuert. So greift der Stop-Loss auch, wenn der Bot kurz nicht läuft. Ist der Pi über Nacht oder mehrere Tage aus, fehlt der Schutz ab dem nächsten Handelstag.

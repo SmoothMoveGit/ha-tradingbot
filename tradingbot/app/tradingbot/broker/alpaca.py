@@ -102,7 +102,8 @@ class AlpacaBroker(Broker):
         """Hält genau eine Stop-Order beim Broker aktuell. Gültig bis Handelsschluss, wird täglich erneuert."""
         stop_price = round(stop_price, 2)
         stops = [o for o in self._open_orders(symbol) if o.type == OrderType.STOP]
-        if stops and abs(float(stops[0].stop_price) - stop_price) / stop_price < 0.005:
+        same_qty = stops and any(abs(float(stops[0].qty or 0) - q) < 1e-6 for q in (round(qty, 9), float(int(qty))))
+        if stops and same_qty and abs(float(stops[0].stop_price) - stop_price) / stop_price < 0.005:
             return
         if stops:
             self._cancel_open(symbol)

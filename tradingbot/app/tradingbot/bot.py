@@ -62,6 +62,38 @@ class TradingBot:
         except Exception:
             log.exception("Stop-Order für %s nicht möglich", pos.symbol)
 
+    def _top_up(self, signals: dict, meta: dict, soon: dict | None, today: date) -> None:
+        """Nachkaufen, wenn eine gehaltene Aktie nach Einzahlungen deutlich unter ihrer Zielgröße liegt."""
+        r, st = self.cfg.risk, self.cfg.strategy
+        target = self.risk.bot_capital() * r.max_position_pct
+        for sym in sorted(meta, key=lambda s: meta[s]):
+            sig = signals.get(sym)
+            gap = target - meta[sym]
+            if not sig or sig.score < st.buy_threshold or gap < max(r.min_order_value, target * r.top_up_min_gap_pct):
+                continue
+            if self.news.latest_shock(sym) <= st.panic_news_threshold:
+                continue
+            if soon is None and self.earnings:
+                soon = self.earnings.upcoming(self.cfg.watchlist, today, self.cfg.news.earnings_guard_days)
+            if soon and sym in soon:
+                continue
+            amount = min(gap, self.risk.free_budget(sum(meta.values()), self.broker.account().cash))
+            if amount < r.min_order_value:
+                return
+            fill = self.broker.buy_notional(sym, amount)
+            if not fill:
+                continue
+            cost = fill.qty * fill.price
+            self.storage.open_meta(sym, cost, fill.price)
+            meta[sym] = self.storage.all_meta()[sym]
+            reason = f"Nachkauf auf Zielgröße, Signal {sig.score:+.2f}"
+            self.storage.record_trade(sym, "buy", fill.qty, fill.price, reason)
+            held = self.broker.positions().get(sym)
+            if held:
+                self._broker_stop(held, self.storage.update_high(sym, fill.price))
+            log.info("NACHKAUF %s %.4f @ %.2f (%.2f) | %s", sym, fill.qty, fill.price, cost, reason)
+            self.reporter.notify(f"Tradingbot: {sym} nachgekauft", f"{cost:.2f} $ zu {fill.price:.2f} $")
+
     def _sell(self, symbol: str, reason: str, meta: dict, today: date) -> None:
         fill = self.broker.sell_all(symbol)
         if fill:
@@ -291,6 +323,7 @@ class TradingBot:
                     self._broker_stop(held, fill.price)
                 log.info("KAUF %s %.4f @ %.2f (%.2f) | %s", sig.symbol, fill.qty, fill.price, cost, reason)
                 self.reporter.notify(f"Tradingbot: {sig.symbol} gekauft", f"{cost:.2f} $ zu {fill.price:.2f} $ ({reason})")
+            self._top_up(signals, meta, soon if candidates else None, today)
 
         positions, meta = self._own_positions()
         value = self.risk.bot_capital() - sum(meta.values()) + sum(p.market_value for p in positions.values())
