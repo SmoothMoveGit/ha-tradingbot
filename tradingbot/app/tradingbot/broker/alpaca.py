@@ -90,6 +90,10 @@ class AlpacaBroker(Broker):
         return self.trading.get_order_by_id(order_id)
 
     def buy_notional(self, symbol: str, amount: float) -> Fill | None:
+        # Alpaca lehnt Käufe ab, solange eine Verkaufs-Stop-Order offen ist ("wash trade").
+        # Beim Nachkauf daher erst den Stop entfernen, der Bot setzt ihn danach neu.
+        if any(o.side == OrderSide.SELL for o in self._open_orders(symbol)):
+            self._cancel_open(symbol)
         req = MarketOrderRequest(
             symbol=symbol, notional=round(amount, 2), side=OrderSide.BUY, time_in_force=TimeInForce.DAY
         )

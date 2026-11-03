@@ -82,6 +82,9 @@ class TradingBot:
                 return
             fill = self.broker.buy_notional(sym, amount)
             if not fill:
+                held = self.broker.positions().get(sym)
+                if held:  # Stop wurde für den Kauf entfernt: wieder setzen
+                    self._broker_stop(held, self.storage.update_high(sym, held.current_price))
                 continue
             cost = fill.qty * fill.price
             self.storage.open_meta(sym, cost, fill.price)

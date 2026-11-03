@@ -3,12 +3,21 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import urllib.request
 from datetime import date, timedelta
 
 log = logging.getLogger(__name__)
 URL = "https://api.nasdaq.com/api/calendar/earnings?date={}"
-HEADERS = {"User-Agent": "Mozilla/5.0 (tradingbot)", "Accept": "application/json"}
+# Die Nasdaq-API antwortet ohne browserähnliche Kopfzeilen oft gar nicht (Zeitüberschreitung)
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Origin": "https://www.nasdaq.com",
+    "Referer": "https://www.nasdaq.com/",
+}
+RETRY_AFTER = 3600  # nach einem Fehler eine Stunde warten, statt jeden Zyklus zu hängen
 
 
 def fetch_day(day: date) -> list[str]:
@@ -32,6 +41,8 @@ class EarningsCalendar:
         cached = self.storage.get(key)
         if cached is not None:
             return {s: date.fromisoformat(d) for s, d in json.loads(cached).items()}
+        if time.time() < float(self.storage.get("earnings_retry_at", 0)):
+            return {}
         found: dict[str, date] = {}
         try:
             for i in range(days + 1):
@@ -40,7 +51,8 @@ class EarningsCalendar:
                     if sym in symbols and sym not in found:
                         found[sym] = d
         except Exception as e:  # Kalender ist ein Zusatz: ohne ihn läuft der Bot normal weiter
-            log.warning("Termine für Quartalszahlen nicht abrufbar: %s", e)
+            log.warning("Termine für Quartalszahlen nicht abrufbar: %s (nächster Versuch in 1 h)", e)
+            self.storage.set("earnings_retry_at", time.time() + RETRY_AFTER)
             return {}
         self.storage.set(key, json.dumps({s: d.isoformat() for s, d in found.items()}))
         if found:

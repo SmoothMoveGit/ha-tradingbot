@@ -398,7 +398,14 @@ def test_earnings_calendar_caches_and_survives_errors():
     assert len(calls) == 3  # zweiter Aufruf aus dem Zwischenspeicher
     def broken(d):
         raise OSError("kein Netz")
-    assert EarningsCalendar(Storage(":memory:"), broken).upcoming(["AAPL"], date(2026, 11, 3), 2) == {}
+    tries = []
+    def broken(d):
+        tries.append(d)
+        raise OSError("kein Netz")
+    cal2 = EarningsCalendar(Storage(":memory:"), broken)
+    assert cal2.upcoming(["AAPL"], date(2026, 11, 3), 2) == {}
+    assert cal2.upcoming(["AAPL"], date(2026, 11, 3), 2) == {}
+    assert len(tries) == 1  # nach Fehler eine Stunde Pause
 
 
 def test_irrelevant_and_duplicate_news_are_skipped():
