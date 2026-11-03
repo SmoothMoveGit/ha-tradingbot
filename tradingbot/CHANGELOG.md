@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.2
+- Claude-Bewertung robuster: Ergebnisse werden über die Nummer der Meldung zugeordnet, kleinere Pakete (20 statt 40). Fehlt eine einzelne Bewertung, wird nur diese Meldung einfach bewertet statt das ganze Paket.
+
 ## 0.5.1
 - Doppelte Meldungen (gleiche Überschrift aus mehreren Quellen) und allgemeine Meldungen ohne Wirtschaftsbezug (z.B. Sport) gehen nicht mehr an Claude. Spart Kosten und macht die Bewertung sauberer.
 

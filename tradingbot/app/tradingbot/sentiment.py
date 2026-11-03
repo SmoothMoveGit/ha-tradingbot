@@ -60,10 +60,10 @@ class SentimentEngine:
                 import anthropic
                 self._client = anthropic.Anthropic()
 
-    def score_many(self, texts: list[str]) -> list[float]:
+    def score_many(self, texts: list[str], fallback_only: bool = False) -> list[float]:
         if not texts:
             return []
-        if self.engine == "claude":
+        if self.engine == "claude" and not fallback_only:
             try:
                 return self._claude_scores(texts)
             except Exception as e:  # Netzwerk/API-Fehler dürfen den Bot nicht stoppen
@@ -71,19 +71,20 @@ class SentimentEngine:
         return [lexicon_score(t) for t in texts]
 
     def impacts_many(self, texts: list[str], companies: dict[str, str], related: dict[str, list[str]],
-                     market_key: str) -> list[dict[str, float]] | None:
+                     market_key: str) -> list[dict[str, float] | None] | None:
         """Wirkung jeder Nachricht auf die Watchlist-Aktien, auch indirekt (Zulieferer, Kunden, Konkurrenz).
-        Nur mit Claude; sonst None (dann ordnet der Aufrufer selbst zu)."""
+        Nur mit Claude; sonst None. Einzelne nicht bewertete Meldungen sind None (dann ordnet der Aufrufer zu)."""
         if self.engine != "claude" or not texts:
             return None
-        try:
-            out: list[dict[str, float]] = []
-            for i in range(0, len(texts), 40):
-                out += self._claude_impacts(texts[i:i + 40], companies, related, market_key)
-            return out
-        except Exception as e:
-            log.warning("Claude-Analyse fehlgeschlagen (%s), nutze einfache Zuordnung.", e)
-            return None
+        out: list[dict[str, float] | None] = []
+        for i in range(0, len(texts), 20):
+            chunk = texts[i:i + 20]
+            try:
+                out += self._claude_impacts(chunk, companies, related, market_key)
+            except Exception as e:
+                log.warning("Claude-Analyse fehlgeschlagen (%s), nutze einfache Zuordnung.", e)
+                out += [None] * len(chunk)
+        return out
 
     def _claude_impacts(self, texts, companies, related, market_key):
         firms = "\n".join(
@@ -98,8 +99,8 @@ class SentimentEngine:
             "Erfolge bei Zulieferern, Kunden, Partnern oder Konkurrenten, Branchentrends, Regulierung, Zölle. "
             "Indirekte Wirkungen sind meist schwächer als direkte. Nenne nur Aktien, die wirklich betroffen sind. "
             '"markt" ist die Wirkung auf den Gesamtmarkt (Konjunktur, Zinsen, Kriege, Krisen), sonst 0.\n'
-            'Antworte nur mit JSON: {"ergebnisse": [{"markt": zahl, "aktien": {"TICKER": zahl}}, ...]} '
-            "in derselben Reihenfolge wie die Nachrichten.\n\n" + numbered
+            'Antworte nur mit JSON, genau ein Eintrag pro Nachricht mit ihrer Nummer: '
+            '{"ergebnisse": [{"nr": 0, "markt": zahl, "aktien": {"TICKER": zahl}}, ...]}\n\n' + numbered
         )
         msg = self._client.messages.create(
             model=self.model, max_tokens=16000, output_config={"effort": "low"},
@@ -107,14 +108,17 @@ class SentimentEngine:
         )
         text = "".join(b.text for b in msg.content if b.type == "text")
         results = json.loads(text[text.index("{"): text.rindex("}") + 1])["ergebnisse"]
-        if len(results) != len(texts):
-            raise ValueError("Anzahl der Bewertungen passt nicht")
         clamp = lambda v: max(-1.0, min(1.0, float(v)))
-        out = []
-        for r in results:
+        out: list[dict[str, float] | None] = [None] * len(texts)
+        for pos, r in enumerate(results):
+            n = r.get("nr", pos)
+            if not isinstance(n, int) or not 0 <= n < len(texts):
+                continue
             effects = {s.upper(): clamp(v) for s, v in (r.get("aktien") or {}).items() if s.upper() in companies}
             effects[market_key] = clamp(r.get("markt", 0))
-            out.append(effects)
+            out[n] = effects
+        if missing := out.count(None):
+            log.info("Claude hat %d von %d Meldungen nicht bewertet, nutze dafür einfache Zuordnung", missing, len(texts))
         return out
 
     def _claude_scores(self, texts: list[str]) -> list[float]:

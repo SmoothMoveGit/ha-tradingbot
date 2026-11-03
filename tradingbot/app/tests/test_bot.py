@@ -386,3 +386,14 @@ def test_irrelevant_and_duplicate_news_are_skipped():
              dict(news("Arsenal win derby"), id="c", time=t)]
     bot.broker.fetch_news = lambda syms, since, limit=500: items
     assert bot.news.refresh() == 1
+
+
+def test_claude_results_matched_by_number():
+    from tradingbot.sentiment import SentimentEngine
+    eng = SentimentEngine("lexicon")
+    eng.engine = "claude"
+    class Msg:
+        content = [type("B", (), {"type": "text", "text": '{"ergebnisse": [{"nr": 1, "markt": 0, "aktien": {"AAPL": -0.5}}]}'})()]
+    eng._client = type("C", (), {"messages": type("M", (), {"create": staticmethod(lambda **kw: Msg())})()})()
+    out = eng.impacts_many(["a", "b"], {"AAPL": "Apple"}, {}, "_M")
+    assert out == [None, {"AAPL": -0.5, "_M": 0.0}]

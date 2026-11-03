@@ -117,16 +117,17 @@ class NewsAnalyzer:
                 new.append(i)
         texts = [f"{i['headline']}. {i['summary']}" for i in new]
         companies = {s: (self.cfg.aliases.get(s) or [s])[0] for s in wl}
-        impacts = self.engine.impacts_many(texts, companies, related, MARKET)
-        if impacts is None:  # Lexikon: direkt genannte Firmen voll, Partnerfirmen abgeschwächt
-            impacts = []
-            for item, score in zip(new, self.engine.score_many(texts)):
+        impacts = self.engine.impacts_many(texts, companies, related, MARKET) or [None] * len(new)
+        todo = [k for k, e in enumerate(impacts) if e is None]
+        if todo:  # ohne Claude-Ergebnis: direkt genannte Firmen voll, Partnerfirmen abgeschwächt
+            for k, score in zip(todo, self.engine.score_many([texts[k] for k in todo], fallback_only=True)):
+                item = new[k]
                 effects = {s: score for s in tag_symbols(item, wl, self.cfg.aliases)}
                 for s in related_symbols(item, wl, related):
                     effects.setdefault(s, score * self.cfg.news.related_weight)
                 if MARKET in effects and len(effects) > 1:
                     del effects[MARKET]
-                impacts.append(effects)
+                impacts[k] = effects
         for item, effects in zip(new, impacts):
             firms = {s: v for s, v in effects.items() if s != MARKET and v}
             for sym, score in firms.items():
