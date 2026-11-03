@@ -68,6 +68,17 @@ Option *Sonderzahlungen gesamt*: Summe aller Einmalzahlungen. Erhöhst du den We
 
 Sind alle Positionsplätze belegt, wird neues Geld (monatlich oder Sonderzahlung) in die gehaltenen Aktien gesteckt: Liegt eine Position mindestens 25 % unter ihrer Zielgröße und ist ihr Signal weiter positiv, kauft der Bot bis zur Zielgröße nach. Vor Quartalszahlen und nach sehr schlechten Nachrichten nicht.
 
+## Daytrader (Vergleich)
+
+Trägst du die Schlüssel eines zweiten Alpaca-Paper-Kontos ein, läuft zusätzlich ein Daytrading-Bot. Er handelt nur mit Spielgeld, auch wenn der Hauptbot auf live steht.
+
+- Alle 2 Minuten: Kauf, wenn eine Aktie über das Hoch der letzten 30 Minuten steigt (mindestens +0,3 %) und über ihrem Tagesdurchschnittspreis (VWAP) liegt.
+- Bis zu 5 Aktien à 20 %, jede Aktie höchstens einmal am Tag.
+- Verkauf bei +1,5 % Gewinn oder -1 % Verlust, 15 Minuten vor Handelsschluss wird alles verkauft.
+- Keine Käufe in der ersten Viertelstunde und in der letzten Dreiviertelstunde, Tageslimit -3 %.
+
+Hinweis: Echtes Daytrading ist in den USA bei Konten unter 25.000 $ auf 3 Tagestrades in 5 Tagen begrenzt. Das Paper-Konto hat 100.000 $ Spielgeld, deshalb greift die Regel im Test nicht.
+
 ## Stop-Order bei Alpaca
 
 Für jede Position liegt zusätzlich eine Stop-Order bei Alpaca. Sie gilt bis Handelsschluss und wird jeden Handelstag erneuert. So greift der Stop-Loss auch, wenn der Bot kurz nicht läuft. Ist der Pi über Nacht oder mehrere Tage aus, fehlt der Schutz ab dem nächsten Handelstag.

@@ -17,6 +17,14 @@ configuration:
   extra_deposit:
     name: Sonderzahlungen gesamt (USD)
     description: Summe aller Einmalzahlungen. Erhöhst du den Wert, wird die Differenz einmal zum Kapital gebucht (der ETF-Vergleich kauft zum selben Tag nach).
+  day_alpaca_api_key:
+    name: Daytrader Alpaca API Key ID
+    description: Zweites Alpaca-Paper-Konto für den Vergleichs-Bot (Daytrading). Leer = kein Daytrader.
+  day_alpaca_secret_key:
+    name: Daytrader Alpaca Secret Key
+  day_budget:
+    name: Daytrader Startbudget (USD)
+    description: Spielgeld für den Daytrader. Leer = 1100.
   strategy:
     name: Strategie
     description: "standard = kurzer Trend, enge Stops. trendfolger = langer Trend 50/200, Stops 15 %. aggressiv = wie trendfolger, aber 3 große Positionen, keine Reserve, Not-Aus erst bei 50 % Verlust."

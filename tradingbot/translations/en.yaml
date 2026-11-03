@@ -14,6 +14,13 @@ configuration:
   extra_deposit:
     name: One-off deposits total (USD)
     description: Sum of all one-off deposits. Raising it books the difference once.
+  day_alpaca_api_key:
+    name: Day trader Alpaca API key ID
+    description: Second Alpaca paper account for the comparison bot. Empty = no day trader.
+  day_alpaca_secret_key:
+    name: Day trader Alpaca secret key
+  day_budget:
+    name: Day trader start budget (USD)
   strategy:
     name: Strategy
     description: "standard = short trend, tight stops. trendfolger = long trend 50/200, 15 % stops. aggressiv = like trendfolger, but 3 large positions, no cash reserve, emergency stop at 50 % loss."

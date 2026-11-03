@@ -64,6 +64,22 @@ class AlpacaBroker(Broker):
     def market_open(self) -> bool:
         return bool(self.trading.get_clock().is_open)
 
+    def minutes_to_close(self, now: datetime | None = None) -> float:
+        clock = self.trading.get_clock()
+        return (clock.next_close - (now or clock.timestamp)).total_seconds() / 60
+
+    def intraday_bars(self, symbols: list[str], now: datetime | None = None, days: int = 0) -> dict[str, list[Bar]]:
+        """5-Minuten-Kerzen ab Handelsbeginn heute (bzw. der letzten `days` Tage für den Backtest)."""
+        from zoneinfo import ZoneInfo
+        from alpaca.data.timeframe import TimeFrameUnit
+        ny = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/New_York"))
+        start = ny.replace(hour=9, minute=30, second=0, microsecond=0) - timedelta(days=days)
+        req = StockBarsRequest(symbol_or_symbols=symbols, timeframe=TimeFrame(5, TimeFrameUnit.Minute),
+                               start=start, feed=DataFeed.IEX)
+        data = self.data.get_stock_bars(req).data
+        return {s: [Bar(b.timestamp, b.open, b.high, b.low, b.close, b.volume) for b in data.get(s, [])]
+                for s in symbols}
+
     def _wait_fill(self, order_id, timeout: float = 30.0):
         deadline = time.time() + timeout
         while time.time() < deadline:

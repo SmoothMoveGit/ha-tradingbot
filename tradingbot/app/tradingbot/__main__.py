@@ -12,7 +12,7 @@ from .storage import Storage
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="tradingbot", description="Autonomer Aktien-Tradingbot")
-    p.add_argument("command", choices=["run", "once", "status", "sim", "backtest", "reset-halt"])
+    p.add_argument("command", choices=["run", "once", "status", "sim", "backtest", "reset-halt", "daytrade"])
     p.add_argument("-c", "--config", default="config.yaml")
     p.add_argument("--days", type=int, default=90, help="Tage für 'sim'")
     p.add_argument("--years", type=float, default=3, help="Jahre für 'backtest'")
@@ -38,6 +38,8 @@ def main(argv=None) -> int:
         return simulate(cfg, args.days)
     if args.command == "backtest":
         return backtest(cfg, args.years, args.variants)
+    if args.command == "daytrade":
+        return daytrade(cfg)
 
     from .bot import TradingBot
     if cfg.mode == "live":
@@ -86,6 +88,24 @@ def backtest(cfg, years: float, variants: bool = False) -> int:
         cut = (end - timedelta(days=365)).date()
         for line in format_variants(run_variants(cfg, bars, start.date(), cut, end.date())):
             out.info(line)
+    return 0
+
+
+def daytrade(cfg) -> int:
+    """Zweiter Bot (nur Spielgeld): erst Backtest der letzten Wochen, dann Daytrading."""
+    from .broker.alpaca import AlpacaBroker
+    from .daytrader import DayTrader, backtest as day_backtest, config_from_env
+    from .homeassistant import HomeAssistantReporter
+    dcfg = config_from_env(cfg.watchlist)
+    broker = AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)  # Daytrader nie mit echtem Geld
+    log = logging.getLogger("tradingbot.daytrader")
+    try:
+        r = day_backtest(dcfg, broker.intraday_bars(dcfg.watchlist, days=30))
+        log.info("DAYTRADER-BACKTEST %d Handelstage: %.2f $ -> %.2f $ (%+.1f%%), %d Verkäufe, %.0f%% mit Gewinn",
+                 r["days"], r["start"], r["end"], (r["end"] / r["start"] - 1) * 100, r["trades"], r["win_rate"] * 100)
+    except Exception as e:
+        log.warning("Daytrader-Backtest fehlgeschlagen: %s", e)
+    DayTrader(dcfg, broker, Storage(cfg.db_path), HomeAssistantReporter.from_env()).run_forever()
     return 0
 
 

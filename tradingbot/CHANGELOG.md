@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.0
+- Zweiter Bot zum Vergleich: Daytrader (nur Spielgeld, eigenes Alpaca-Paper-Konto). Kauft Ausbrüche auf 5-Minuten-Kursen, bis zu 5 Aktien, verkauft bei +1,5 % oder -1 % und ist zum Handelsschluss immer komplett draußen. Beim Start Backtest über die letzten 30 Tage. Sensoren `sensor.daytrader_*`.
+
 ## 0.5.4
 - Nachkauf: Liegt eine gehaltene Aktie nach Einzahlungen um mindestens ein Viertel unter ihrer Zielgröße und ist das Signal weiter positiv, kauft der Bot nach. Vorher blieb neues Geld liegen, solange alle Plätze belegt waren. Gilt auch im Backtest.
 - Stop-Order bei Alpaca wird auch bei geänderter Stückzahl erneuert.

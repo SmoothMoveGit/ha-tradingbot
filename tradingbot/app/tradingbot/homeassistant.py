@@ -16,6 +16,8 @@ class Reporter:
 
     def notify(self, title: str, message: str) -> None: ...
 
+    def publish_daytrader(self, status: dict) -> None: ...
+
 
 class HomeAssistantReporter(Reporter):
     def __init__(self, url: str, token: str, notify_service: str = ""):
@@ -91,6 +93,19 @@ class HomeAssistantReporter(Reporter):
                     bewertung="positiv" if m > 0.15 else "negativ" if m < -0.15 else "neutral",
                     aktien=s["news_scores"], signale=s["signals"], schlagzeilen=s["news"])
         self._state("sensor.tradingbot_trades", s["trade_count"], friendly_name="Tradingbot Trades",
+                    icon="mdi:swap-horizontal", state_class="total", letzte=s["trades"])
+
+    def publish_daytrader(self, s: dict) -> None:
+        money = {"unit_of_measurement": "USD", "device_class": "monetary", "state_class": "total"}
+        self._state("sensor.daytrader_wert", round(s["value"], 2), friendly_name="Daytrader Wert",
+                    icon="mdi:lightning-bolt", startbudget=s["start_budget"],
+                    rendite_prozent=round((s["value"] / s["start_budget"] - 1) * 100, 2), **money)
+        self._state("sensor.daytrader_gewinn", round(s["realized_pnl"], 2),
+                    friendly_name="Daytrader realisierter Gewinn", icon="mdi:cash-plus", **money)
+        self._state("sensor.daytrader_positionen", len(s["positions"]), friendly_name="Daytrader Positionen",
+                    icon="mdi:briefcase", aktien=s["positions"])
+        self._state("sensor.daytrader_status", s["status"], friendly_name="Daytrader Status", icon="mdi:robot")
+        self._state("sensor.daytrader_trades", s["trade_count"], friendly_name="Daytrader Trades",
                     icon="mdi:swap-horizontal", state_class="total", letzte=s["trades"])
 
     def notify(self, title: str, message: str) -> None:

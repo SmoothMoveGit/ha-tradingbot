@@ -428,3 +428,27 @@ def test_claude_results_matched_by_number():
     eng._client = type("C", (), {"messages": type("M", (), {"create": staticmethod(lambda **kw: Msg())})()})()
     out = eng.impacts_many(["a", "b"], {"AAPL": "Apple"}, {}, "_M")
     assert out == [None, {"AAPL": -0.5, "_M": 0.0}]
+
+
+def _day_bars(prices, day=(2026, 11, 2)):
+    from zoneinfo import ZoneInfo
+    from tradingbot.broker.base import Bar
+    t0 = datetime(*day, 9, 30, tzinfo=ZoneInfo("America/New_York"))
+    return [Bar(t0 + timedelta(minutes=5 * i), p, p * 1.001, p * 0.999, p, 1000) for i, p in enumerate(prices)]
+
+
+def test_daytrader_entry_signal():
+    from tradingbot.daytrader import DayConfig, entry_signal
+    cfg = DayConfig(watchlist=["AAA"])
+    assert entry_signal(_day_bars([100] * 10 + [100.5]), cfg) is not None
+    assert entry_signal(_day_bars([100] * 11), cfg) is None
+    assert entry_signal(_day_bars([102, 101, 100, 100, 100, 100, 100, 100.2]), cfg) is None  # unter VWAP
+
+
+def test_daytrader_backtest_takes_profit_and_is_flat_at_close():
+    from tradingbot.daytrader import DayConfig, backtest
+    rise = [100] * 6 + [100 + 0.2 * i for i in range(1, 70)]  # steigt den ganzen Tag
+    res = backtest(DayConfig(watchlist=["AAA"], start_budget=1000), {"AAA": _day_bars(rise[:78])})
+    assert res["days"] == 1
+    assert res["trades"] >= 1
+    assert res["end"] > 1000

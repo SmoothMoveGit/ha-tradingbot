@@ -53,10 +53,10 @@ class Storage:
         ).fetchall()
 
     # Trades und Positionen
-    def record_trade(self, symbol, side, qty, price, reason, pnl=0.0) -> None:
+    def record_trade(self, symbol, side, qty, price, reason, pnl=0.0, when: datetime | None = None) -> None:
         self.db.execute(
             "INSERT INTO trades (time,symbol,side,qty,price,reason,pnl) VALUES (?,?,?,?,?,?,?)",
-            (_iso(datetime.now(timezone.utc)), symbol, side, qty, price, reason, pnl),
+            (_iso(when or datetime.now(timezone.utc)), symbol, side, qty, price, reason, pnl),
         )
         self.db.commit()
 
@@ -71,14 +71,14 @@ class Storage:
     def trade_count(self) -> int:
         return self.db.execute("SELECT COUNT(*) FROM trades").fetchone()[0]
 
-    def open_meta(self, symbol: str, cost: float, price: float) -> None:
+    def open_meta(self, symbol: str, cost: float, price: float, when: datetime | None = None) -> None:
         row = self.get_meta(symbol)
         if row:
             self.db.execute("UPDATE positions_meta SET cost=cost+? WHERE symbol=?", (cost, symbol))
         else:
             self.db.execute(
                 "INSERT INTO positions_meta VALUES (?,?,?,?)",
-                (symbol, cost, price, _iso(datetime.now(timezone.utc))),
+                (symbol, cost, price, _iso(when or datetime.now(timezone.utc))),
             )
         self.db.commit()
 

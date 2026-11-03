@@ -37,6 +37,15 @@ def main() -> int:
         shutil.copy(EXAMPLE, CONFIG)
         print(f"Neue Konfiguration angelegt: {CONFIG} (Watchlist und Risiko dort anpassbar)", flush=True)
 
+    if opts.get("day_alpaca_api_key") and opts.get("day_alpaca_secret_key"):
+        import subprocess
+        import sys
+        day_env = {**os.environ, "ALPACA_API_KEY": opts["day_alpaca_api_key"],
+                   "ALPACA_SECRET_KEY": opts["day_alpaca_secret_key"], "TRADINGBOT_DB_PATH": "/data/daytrader.db",
+                   "TRADINGBOT_MODE": "paper", "DAYTRADER_BUDGET": str(opts.get("day_budget") or 1100)}
+        subprocess.Popen([sys.executable, "-m", "tradingbot", "daytrade", "-c", str(CONFIG)], env=day_env)
+        print("Daytrader (Vergleichs-Bot, nur Spielgeld) gestartet", flush=True)
+
     from .__main__ import main as cli
     # neu testen bei neuer Version, Einzahlung oder Strategie
     marker = OPTIONS.parent / f"backtest-{os.getenv('TRADINGBOT_VERSION', 'dev')}-{os.getenv('TRADINGBOT_MONTHLY_DEPOSIT') or 0}-{os.getenv('TRADINGBOT_PROFILE') or 'standard'}.done"
