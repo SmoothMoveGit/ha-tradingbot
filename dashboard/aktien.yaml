@@ -1,0 +1,503 @@
+# Home-Assistant-Dashboard „Aktien“ für den Tradingbot.
+# Braucht aus HACS: Mushroom und card-mod. Einfügen: siehe dashboard/ANLEITUNG.md
+views:
+- title: Aktien
+  path: aktien
+  type: sections
+  max_columns: 4
+  icon: mdi:finance
+  sections:
+  - type: grid
+    column_span: 2
+    cards:
+    - type: heading
+      heading: Übersicht
+      heading_style: title
+      icon: mdi:chart-line
+    - type: custom:mushroom-chips-card
+      alignment: start
+      grid_options:
+        columns: 12
+      chips:
+      - type: template
+        entity: sensor.tradingbot_status
+        content: '{{ states(''sensor.tradingbot_status'') }}'
+        icon: '{{ ''mdi:play-circle'' if is_state(''sensor.tradingbot_status'',''handelt'') else ''mdi:moon-waning-crescent'' if is_state(''sensor.tradingbot_status'',''Börse geschlossen'') else ''mdi:alert-octagon''
+          }}'
+        icon_color: '{{ ''green'' if is_state(''sensor.tradingbot_status'',''handelt'') else ''blue'' if is_state(''sensor.tradingbot_status'',''Börse geschlossen'') else ''red'' }}'
+        tap_action:
+          action: more-info
+      - type: template
+        entity: sensor.tradingbot_status
+        content: '{{ ''Paper (Spielgeld)'' if state_attr(''sensor.tradingbot_status'',''modus'') == ''paper'' else (state_attr(''sensor.tradingbot_status'',''modus'') or '''')|capitalize }}'
+        icon: mdi:flask-outline
+        icon_color: '{{ ''orange'' if state_attr(''sensor.tradingbot_status'',''modus'') == ''paper'' else ''red'' }}'
+      - type: template
+        entity: sensor.tradingbot_status
+        content: 'Strategie: {{ (state_attr(''sensor.tradingbot_status'',''strategie'') or ''–'')|capitalize }}'
+        icon: mdi:chess-knight
+        icon_color: purple
+      - type: template
+        entity: binary_sensor.tradingbot_not_aus
+        content: '{{ ''NOT-AUS aktiv'' if is_state(''binary_sensor.tradingbot_not_aus'',''on'') else ''Not-Aus bereit'' }}'
+        icon: mdi:shield-check
+        icon_color: '{{ ''red'' if is_state(''binary_sensor.tradingbot_not_aus'',''on'') else ''green'' }}'
+      card_mod:
+        style: 'ha-card { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif; }'
+    - type: markdown
+      content: |-
+        {% macro n(x, d=2) %}{{ ('{:,.' ~ d ~ 'f}').format(x|float(0)).replace(',', '#').replace('.', ',').replace('#', '.') }}{% endmacro %}{% macro s(x, d=2) %}{{ '+' if x|float(0) >= 0 else '−' }}{{ n((x|float(0))|abs, d) }}{% endmacro %}{% macro c(x) %}{{ '#34C759' if x|float(0) >= 0 else '#FF3B30' }}{% endmacro %}
+        {% set w = states('sensor.tradingbot_wert')|float(0) %}
+        {% set k = states('sensor.tradingbot_kapital')|float(0) %}
+        {% set g = states('sensor.tradingbot_gewinn')|float(0) %}
+        {% set paid = state_attr('sensor.tradingbot_rendite','eingezahlt') or (k - g) %}
+        {% set diff = w - paid %}
+        {% set pct = (diff / paid * 100) if paid else 0 %}
+        {% set e = states('sensor.tradingbot_vergleich_etf')|float(0) %}
+        {% set heute = states('sensor.tradingbot_heute') %}
+        ### Depotwert · {{ (state_attr('sensor.tradingbot_status','modus') or '')|upper }}
+        # {{ n(w) }} $
+        <font color="{{ c(diff) }}">**{{ '▲' if diff >= 0 else '▼' }} {{ s(diff) }} $ ({{ s(pct) }} %)**</font> <font color="#8E8E93">seit Start · eingezahlt {{ n(paid) }} $</font>
+        {% if heute not in ['unknown','unavailable'] %}
+        <font color="{{ c(heute) }}">**{{ s(heute) }} %**</font> <font color="#8E8E93">heute</font>
+        {% endif %}
+        <hr>
+        <font color="#8E8E93">MSCI World (gleiches Geld im ETF)</font> **{{ n(e) }} $** · <font color="{{ c(w - e) }}">**{{ s(w - e) }} $** {{ 'Vorsprung' if w >= e else 'Rückstand' }}</font>
+      card_mod:
+        style:
+          .: |-
+            ha-card {
+              border-radius: 22px !important;
+              border: none !important;
+              box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+              -webkit-font-smoothing: antialiased;
+            }
+          ha-markdown$: |-
+            ha-markdown { padding: 18px 20px !important; }
+            h1 { font-size: 46px; font-weight: 700; letter-spacing: -1.5px; margin: 2px 0 6px 0; line-height: 1.05; }
+            h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; margin: 0 0 10px 0; }
+            h3 { font-size: 13px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--secondary-text-color); margin: 0 0 2px 0; }
+            p { margin: 0 0 6px 0; }
+            table { width: 100%; border-collapse: collapse; }
+            th { font-size: 12px; font-weight: 600; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: .4px; padding: 0 0 6px 0; border: none; }
+            td { padding: 9px 0; border-top: 1px solid var(--divider-color); vertical-align: middle; }
+            hr { border: none; border-top: 1px solid var(--divider-color); margin: 10px 0; }
+      grid_options:
+        columns: 12
+    - type: custom:mushroom-template-card
+      entity: sensor.tradingbot_kapital
+      primary: '{{ (''{:,.2f}'').format(states(''sensor.tradingbot_kapital'')|float(0)).replace('','', ''#'').replace(''.'', '','').replace(''#'', ''.'') }} $'
+      secondary: Kapital · Start + Gewinne
+      icon: mdi:bank
+      icon_color: blue
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 6
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px !important;
+            border: none !important;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+            -webkit-font-smoothing: antialiased;
+          }
+          ha-card { padding: 4px 2px !important; }
+    - type: custom:mushroom-template-card
+      entity: sensor.tradingbot_bargeld
+      primary: '{% if states(''sensor.tradingbot_bargeld'') in [''unknown'',''unavailable''] %}–{% else %}{{ (''{:,.2f}'').format(states(''sensor.tradingbot_bargeld'')|float(0)).replace('','', ''#'').replace(''.'',
+        '','').replace(''#'', ''.'') }} ${% endif %}'
+      secondary: Bargeld · frei
+      icon: mdi:wallet
+      icon_color: teal
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 6
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px !important;
+            border: none !important;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+            -webkit-font-smoothing: antialiased;
+          }
+          ha-card { padding: 4px 2px !important; }
+    - type: custom:mushroom-template-card
+      entity: sensor.tradingbot_gewinn
+      primary: '{% set x = states(''sensor.tradingbot_gewinn'')|float(0) %}{{ ''+'' if x >= 0 else ''−'' }}{{ (''{:,.2f}'').format(x|abs).replace('','', ''#'').replace(''.'', '','').replace(''#'', ''.'')
+        }} $'
+      secondary: Realisiert · abgeschlossene Trades
+      icon: mdi:cash-check
+      icon_color: '{{ ''green'' if states(''sensor.tradingbot_gewinn'')|float(0) >= 0 else ''red'' }}'
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 6
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px !important;
+            border: none !important;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+            -webkit-font-smoothing: antialiased;
+          }
+          ha-card { padding: 4px 2px !important; }
+    - type: custom:mushroom-template-card
+      entity: sensor.tradingbot_unrealisiert
+      primary: '{% if states(''sensor.tradingbot_unrealisiert'') in [''unknown'',''unavailable''] %}–{% else %}{% set x = states(''sensor.tradingbot_unrealisiert'')|float(0) %}{{ ''+'' if x >= 0 else ''−''
+        }}{{ (''{:,.2f}'').format(x|abs).replace('','', ''#'').replace(''.'', '','').replace(''#'', ''.'') }} ${% endif %}'
+      secondary: Offen · laufende Positionen
+      icon: mdi:chart-areaspline
+      icon_color: '{{ ''green'' if states(''sensor.tradingbot_unrealisiert'')|float(0) >= 0 else ''red'' }}'
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 6
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px !important;
+            border: none !important;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+            -webkit-font-smoothing: antialiased;
+          }
+          ha-card { padding: 4px 2px !important; }
+  - type: grid
+    column_span: 2
+    cards:
+    - type: heading
+      heading: Entwicklung
+      heading_style: title
+      icon: mdi:chart-timeline-variant
+    - type: history-graph
+      title: 'Verlauf: Bot vs. MSCI World'
+      hours_to_show: 168
+      entities:
+      - entity: sensor.tradingbot_wert
+        name: Bot
+        color: '#0A84FF'
+      - entity: sensor.tradingbot_vergleich_etf
+        name: MSCI World
+        color: '#8E8E93'
+      grid_options:
+        columns: full
+        rows: 5
+      card_mod:
+        style: |-
+          ha-card {
+            border-radius: 22px !important;
+            border: none !important;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+            -webkit-font-smoothing: antialiased;
+          }
+    - type: statistics-graph
+      title: Langfristig (Tageswerte)
+      entities:
+      - entity: sensor.tradingbot_wert
+        name: Bot
+        color: '#0A84FF'
+      - entity: sensor.tradingbot_vergleich_etf
+        name: MSCI World
+        color: '#8E8E93'
+      stat_types:
+      - state
+      period: day
+      days_to_show: 90
+      chart_type: line
+      grid_options:
+        columns: full
+        rows: 5
+      card_mod:
+        style: |-
+          ha-card {
+            border-radius: 22px !important;
+            border: none !important;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+            -webkit-font-smoothing: antialiased;
+          }
+  - type: grid
+    column_span: 2
+    cards:
+    - type: heading
+      heading: Depot
+      heading_style: title
+      icon: mdi:briefcase-outline
+    - type: markdown
+      content: |-
+        {% macro n(x, d=2) %}{{ ('{:,.' ~ d ~ 'f}').format(x|float(0)).replace(',', '#').replace('.', ',').replace('#', '.') }}{% endmacro %}{% macro s(x, d=2) %}{{ '+' if x|float(0) >= 0 else '−' }}{{ n((x|float(0))|abs, d) }}{% endmacro %}{% macro c(x) %}{{ '#34C759' if x|float(0) >= 0 else '#FF3B30' }}{% endmacro %}
+        ## Positionen
+        {% set d = state_attr('sensor.tradingbot_positionen','details') %}
+        {% set max = state_attr('sensor.tradingbot_positionen','max_positionen') %}
+        {% if d %}
+        <table><tr><th align="left">Aktie</th><th align="right">Wert</th><th align="right">G/V</th></tr>
+        {% for p in d %}<tr><td><b>{{ p.symbol }}</b><br><font color="#8E8E93">{{ n(p.stueck, 3) }} Stk · Ø {{ n(p.einstand) }} $ → {{ n(p.kurs) }} $</font></td><td align="right"><b>{{ n(p.wert) }} $</b></td><td align="right"><font color="{{ c(p.gewinn) }}"><b>{{ s(p.prozent) }} %</b><br>{{ s(p.gewinn) }} $</font></td></tr>
+        {% endfor %}</table>
+        <font color="#8E8E93">{{ d|count }} von {{ max or '–' }} Plätzen belegt</font>
+        {% elif state_attr('sensor.tradingbot_positionen','aktien') %}
+        {% for a in state_attr('sensor.tradingbot_positionen','aktien') %}**{{ a }}**{{ ' · ' if not loop.last }}{% endfor %}
+
+        <font color="#8E8E93">Details (Kurs, Gewinn je Aktie) erscheinen nach dem Update auf Version 0.5.0.</font>
+        {% else %}
+        <font color="#8E8E93">Keine offenen Positionen.</font>
+        {% endif %}
+      card_mod:
+        style:
+          .: |-
+            ha-card {
+              border-radius: 22px !important;
+              border: none !important;
+              box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+              -webkit-font-smoothing: antialiased;
+            }
+          ha-markdown$: |-
+            ha-markdown { padding: 18px 20px !important; }
+            h1 { font-size: 46px; font-weight: 700; letter-spacing: -1.5px; margin: 2px 0 6px 0; line-height: 1.05; }
+            h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; margin: 0 0 10px 0; }
+            h3 { font-size: 13px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--secondary-text-color); margin: 0 0 2px 0; }
+            p { margin: 0 0 6px 0; }
+            table { width: 100%; border-collapse: collapse; }
+            th { font-size: 12px; font-weight: 600; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: .4px; padding: 0 0 6px 0; border: none; }
+            td { padding: 9px 0; border-top: 1px solid var(--divider-color); vertical-align: middle; }
+            hr { border: none; border-top: 1px solid var(--divider-color); margin: 10px 0; }
+      grid_options:
+        columns: 12
+    - type: markdown
+      content: |-
+        {% macro n(x, d=2) %}{{ ('{:,.' ~ d ~ 'f}').format(x|float(0)).replace(',', '#').replace('.', ',').replace('#', '.') }}{% endmacro %}{% macro s(x, d=2) %}{{ '+' if x|float(0) >= 0 else '−' }}{{ n((x|float(0))|abs, d) }}{% endmacro %}{% macro c(x) %}{{ '#34C759' if x|float(0) >= 0 else '#FF3B30' }}{% endmacro %}
+        ## Letzte Trades
+        {% set t = state_attr('sensor.tradingbot_trades','letzte') %}
+        {% if t %}
+        <table>
+        {% for x in t[:8] %}<tr><td><font color="{{ '#0A84FF' if x.art == 'Kauf' else '#FF9500' }}">●</font> <b>{{ x.symbol }}</b> {{ x.art }}<br><font color="#8E8E93">{{ as_timestamp(x.zeit)|timestamp_custom('%d.%m. %H:%M') }} · {{ x.grund }}</font></td><td align="right">{{ n(x.stueck, 3) }} × {{ n(x.preis) }} $<br>{% if x.art == 'Verkauf' %}<font color="{{ c(x.gewinn) }}"><b>{{ s(x.gewinn) }} $</b></font>{% else %}<font color="#8E8E93">{{ n(x.stueck * x.preis) }} $</font>{% endif %}</td></tr>
+        {% endfor %}</table>
+        <font color="#8E8E93">{{ states('sensor.tradingbot_trades') }} Trades insgesamt</font>
+        {% else %}
+        **Letzter Trade:** {{ state_attr('sensor.tradingbot_status','letzter_trade') or 'noch keiner' }}
+
+        <font color="#8E8E93">Die vollständige Liste erscheint nach dem Update auf Version 0.5.0.</font>
+        {% endif %}
+      card_mod:
+        style:
+          .: |-
+            ha-card {
+              border-radius: 22px !important;
+              border: none !important;
+              box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+              -webkit-font-smoothing: antialiased;
+            }
+          ha-markdown$: |-
+            ha-markdown { padding: 18px 20px !important; }
+            h1 { font-size: 46px; font-weight: 700; letter-spacing: -1.5px; margin: 2px 0 6px 0; line-height: 1.05; }
+            h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; margin: 0 0 10px 0; }
+            h3 { font-size: 13px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--secondary-text-color); margin: 0 0 2px 0; }
+            p { margin: 0 0 6px 0; }
+            table { width: 100%; border-collapse: collapse; }
+            th { font-size: 12px; font-weight: 600; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: .4px; padding: 0 0 6px 0; border: none; }
+            td { padding: 9px 0; border-top: 1px solid var(--divider-color); vertical-align: middle; }
+            hr { border: none; border-top: 1px solid var(--divider-color); margin: 10px 0; }
+      grid_options:
+        columns: 12
+  - type: grid
+    column_span: 2
+    cards:
+    - type: heading
+      heading: Nachrichten
+      heading_style: title
+      icon: mdi:newspaper-variant-outline
+    - type: gauge
+      entity: sensor.tradingbot_marktstimmung
+      name: Weltlage (Nachrichten)
+      min: -1
+      max: 1
+      needle: true
+      segments:
+      - from: -1
+        color: '#FF3B30'
+      - from: -0.15
+        color: '#FFCC00'
+      - from: 0.15
+        color: '#34C759'
+      grid_options:
+        columns: 6
+        rows: 3
+      card_mod:
+        style: |-
+          ha-card {
+            border-radius: 22px !important;
+            border: none !important;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+            -webkit-font-smoothing: antialiased;
+          }
+    - type: markdown
+      content: |-
+        {% macro n(x, d=2) %}{{ ('{:,.' ~ d ~ 'f}').format(x|float(0)).replace(',', '#').replace('.', ',').replace('#', '.') }}{% endmacro %}{% macro s(x, d=2) %}{{ '+' if x|float(0) >= 0 else '−' }}{{ n((x|float(0))|abs, d) }}{% endmacro %}{% macro c(x) %}{{ '#34C759' if x|float(0) >= 0 else '#FF3B30' }}{% endmacro %}
+        ## Signale
+        {% set sg = state_attr('sensor.tradingbot_marktstimmung','signale') %}
+        {% set ns = state_attr('sensor.tradingbot_marktstimmung','aktien') %}
+        {% if sg %}
+        <table><tr><th align="left">Aktie</th><th align="right">Trend</th><th align="right">News</th><th align="right">Gesamt</th></tr>
+        {% for sym, v in sg.items()|sort(attribute='1.gesamt', reverse=true) %}<tr><td><b>{{ sym }}</b></td><td align="right"><font color="{{ c(v.trend) }}">{{ s(v.trend) }}</font></td><td align="right"><font color="{{ c(v.news) }}">{{ s(v.news) }}</font></td><td align="right"><b><font color="{{ c(v.gesamt) }}">{{ s(v.gesamt) }}</font></b></td></tr>
+        {% endfor %}</table>
+        <font color="#8E8E93">−1 = sehr negativ · +1 = sehr positiv. Signale werden nur bei offener Börse berechnet.</font>
+        {% elif ns %}
+        {% for sym, v in ns.items() %}**{{ sym }}** <font color="{{ c(v) }}">{{ s(v) }}</font>{{ ' · ' if not loop.last }}{% endfor %}
+        {% else %}
+        <font color="#8E8E93">Signale und Nachrichten-Bewertung je Aktie erscheinen nach dem Update auf Version 0.5.0.</font>
+        {% endif %}
+      card_mod:
+        style:
+          .: |-
+            ha-card {
+              border-radius: 22px !important;
+              border: none !important;
+              box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+              -webkit-font-smoothing: antialiased;
+            }
+          ha-markdown$: |-
+            ha-markdown { padding: 18px 20px !important; }
+            h1 { font-size: 46px; font-weight: 700; letter-spacing: -1.5px; margin: 2px 0 6px 0; line-height: 1.05; }
+            h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; margin: 0 0 10px 0; }
+            h3 { font-size: 13px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--secondary-text-color); margin: 0 0 2px 0; }
+            p { margin: 0 0 6px 0; }
+            table { width: 100%; border-collapse: collapse; }
+            th { font-size: 12px; font-weight: 600; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: .4px; padding: 0 0 6px 0; border: none; }
+            td { padding: 9px 0; border-top: 1px solid var(--divider-color); vertical-align: middle; }
+            hr { border: none; border-top: 1px solid var(--divider-color); margin: 10px 0; }
+      grid_options:
+        columns: 6
+    - type: markdown
+      content: |-
+        {% macro n(x, d=2) %}{{ ('{:,.' ~ d ~ 'f}').format(x|float(0)).replace(',', '#').replace('.', ',').replace('#', '.') }}{% endmacro %}{% macro s(x, d=2) %}{{ '+' if x|float(0) >= 0 else '−' }}{{ n((x|float(0))|abs, d) }}{% endmacro %}{% macro c(x) %}{{ '#34C759' if x|float(0) >= 0 else '#FF3B30' }}{% endmacro %}
+        ## Schlagzeilen
+        {% set h = state_attr('sensor.tradingbot_marktstimmung','schlagzeilen') %}
+        {% if h %}
+        <table>
+        {% for x in h %}<tr><td><font color="{{ '#34C759' if x.bewertung > 0.15 else '#FF3B30' if x.bewertung < -0.15 else '#8E8E93' }}">●</font> {{ x.titel }}<br><font color="#8E8E93">{{ x.symbol }} · {{ as_timestamp(x.zeit)|timestamp_custom('%d.%m. %H:%M') }} · Bewertung {{ s(x.bewertung) }}</font></td></tr>
+        {% endfor %}</table>
+        {% else %}
+        <font color="#8E8E93">Die neuesten bewerteten Nachrichten erscheinen nach dem Update auf Version 0.5.0.</font>
+        {% endif %}
+      card_mod:
+        style:
+          .: |-
+            ha-card {
+              border-radius: 22px !important;
+              border: none !important;
+              box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+              -webkit-font-smoothing: antialiased;
+            }
+          ha-markdown$: |-
+            ha-markdown { padding: 18px 20px !important; }
+            h1 { font-size: 46px; font-weight: 700; letter-spacing: -1.5px; margin: 2px 0 6px 0; line-height: 1.05; }
+            h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; margin: 0 0 10px 0; }
+            h3 { font-size: 13px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--secondary-text-color); margin: 0 0 2px 0; }
+            p { margin: 0 0 6px 0; }
+            table { width: 100%; border-collapse: collapse; }
+            th { font-size: 12px; font-weight: 600; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: .4px; padding: 0 0 6px 0; border: none; }
+            td { padding: 9px 0; border-top: 1px solid var(--divider-color); vertical-align: middle; }
+            hr { border: none; border-top: 1px solid var(--divider-color); margin: 10px 0; }
+      grid_options:
+        columns: 12
+  - type: grid
+    column_span: 2
+    cards:
+    - type: heading
+      heading: Risiko & Bot
+      heading_style: title
+      icon: mdi:shield-half-full
+    - type: markdown
+      content: |-
+        {% macro n(x, d=2) %}{{ ('{:,.' ~ d ~ 'f}').format(x|float(0)).replace(',', '#').replace('.', ',').replace('#', '.') }}{% endmacro %}{% macro s(x, d=2) %}{{ '+' if x|float(0) >= 0 else '−' }}{{ n((x|float(0))|abs, d) }}{% endmacro %}{% macro c(x) %}{{ '#34C759' if x|float(0) >= 0 else '#FF3B30' }}{% endmacro %}
+        ## Risiko
+        {% set dd = states('sensor.tradingbot_drawdown') %}
+        {% set a = states.sensor.tradingbot_drawdown.attributes if states.sensor.tradingbot_drawdown is defined else {} %}
+        {% if dd not in ['unknown','unavailable'] and a %}
+        {% set lim = a.not_aus_bei_prozent|float(25) %}
+        {% set used = [ (dd|float(0)) / lim * 100, 100 ]|min if lim else 0 %}
+        {% set blocks = (used / 10)|round(0, 'ceil')|int %}
+        ### Abstand zum Höchststand
+        # {{ n(dd, 1) }} %
+        <font color="{{ '#34C759' if used < 40 else '#FF9500' if used < 75 else '#FF3B30' }}">{{ '▰' * blocks }}</font><font color="#D1D1D6">{{ '▱' * (10 - blocks) }}</font> <font color="#8E8E93">Not-Aus bei {{ n(lim, 0) }} %</font>
+
+        <table>
+        <tr><td>Höchststand</td><td align="right"><b>{{ n(a.hoechststand) }} $</b></td></tr>
+        <tr><td>Heute</td><td align="right"><b><font color="{{ c(states('sensor.tradingbot_heute')) }}">{{ s(states('sensor.tradingbot_heute')) }} %</font></b> <font color="#8E8E93">Limit −{{ n(state_attr('sensor.tradingbot_heute','tageslimit_prozent'), 0) }} %</font></td></tr>
+        <tr><td>Stop-Loss je Aktie</td><td align="right"><b>−{{ n(a.stop_loss_prozent, 0) }} %</b></td></tr>
+        <tr><td>Trailing-Stop</td><td align="right"><b>−{{ n(a.trailing_stop_prozent, 0) }} %</b> <font color="#8E8E93">vom Hoch</font></td></tr>
+        <tr><td>Gewinnmitnahme</td><td align="right"><b>{{ '–' if a.gewinnmitnahme_prozent|float(0) >= 500 else '+' ~ n(a.gewinnmitnahme_prozent, 0) ~ ' %' }}</b></td></tr>
+        </table>
+        {% else %}
+        **Not-Aus:** {{ 'AUSGELÖST' if is_state('binary_sensor.tradingbot_not_aus','on') else 'nicht ausgelöst' }}
+
+        <font color="#8E8E93">Drawdown, Tageslimit und Stop-Werte erscheinen nach dem Update auf Version 0.5.0.</font>
+        {% endif %}
+      card_mod:
+        style:
+          .: |-
+            ha-card {
+              border-radius: 22px !important;
+              border: none !important;
+              box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+              -webkit-font-smoothing: antialiased;
+            }
+          ha-markdown$: |-
+            ha-markdown { padding: 18px 20px !important; }
+            h1 { font-size: 46px; font-weight: 700; letter-spacing: -1.5px; margin: 2px 0 6px 0; line-height: 1.05; }
+            h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; margin: 0 0 10px 0; }
+            h3 { font-size: 13px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--secondary-text-color); margin: 0 0 2px 0; }
+            p { margin: 0 0 6px 0; }
+            table { width: 100%; border-collapse: collapse; }
+            th { font-size: 12px; font-weight: 600; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: .4px; padding: 0 0 6px 0; border: none; }
+            td { padding: 9px 0; border-top: 1px solid var(--divider-color); vertical-align: middle; }
+            hr { border: none; border-top: 1px solid var(--divider-color); margin: 10px 0; }
+      grid_options:
+        columns: 6
+    - type: markdown
+      content: |-
+        {% macro n(x, d=2) %}{{ ('{:,.' ~ d ~ 'f}').format(x|float(0)).replace(',', '#').replace('.', ',').replace('#', '.') }}{% endmacro %}{% macro s(x, d=2) %}{{ '+' if x|float(0) >= 0 else '−' }}{{ n((x|float(0))|abs, d) }}{% endmacro %}{% macro c(x) %}{{ '#34C759' if x|float(0) >= 0 else '#FF3B30' }}{% endmacro %}
+        ## Bot
+        <table>
+        <tr><td>Status</td><td align="right"><b>{{ states('sensor.tradingbot_status') }}</b></td></tr>
+        <tr><td>Modus</td><td align="right"><b>{{ state_attr('sensor.tradingbot_status','modus') }}</b></td></tr>
+        <tr><td>Strategie</td><td align="right"><b>{{ state_attr('sensor.tradingbot_status','strategie') or '–' }}</b></td></tr>
+        <tr><td>Watchlist</td><td align="right">{{ (state_attr('sensor.tradingbot_status','watchlist') or [])|join(', ') or '–' }}</td></tr>
+        <tr><td>Prüft alle</td><td align="right">{{ state_attr('sensor.tradingbot_status','intervall_minuten') or '–' }} min</td></tr>
+        <tr><td>Letzter Lauf</td><td align="right">{% set l = state_attr('sensor.tradingbot_status','letzter_lauf') %}{{ as_timestamp(l)|timestamp_custom('%d.%m. %H:%M') if l else as_timestamp(states.sensor.tradingbot_wert.last_updated)|timestamp_custom('%d.%m. %H:%M') }}</td></tr>
+        </table>
+        <font color="#8E8E93">Börse New York: 15:30–22:00 Uhr (deutsche Zeit, Ausnahmen bei Zeitumstellung)</font>
+      card_mod:
+        style:
+          .: |-
+            ha-card {
+              border-radius: 22px !important;
+              border: none !important;
+              box-shadow: 0 6px 24px rgba(0,0,0,0.07) !important;
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+              -webkit-font-smoothing: antialiased;
+            }
+          ha-markdown$: |-
+            ha-markdown { padding: 18px 20px !important; }
+            h1 { font-size: 46px; font-weight: 700; letter-spacing: -1.5px; margin: 2px 0 6px 0; line-height: 1.05; }
+            h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; margin: 0 0 10px 0; }
+            h3 { font-size: 13px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--secondary-text-color); margin: 0 0 2px 0; }
+            p { margin: 0 0 6px 0; }
+            table { width: 100%; border-collapse: collapse; }
+            th { font-size: 12px; font-weight: 600; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: .4px; padding: 0 0 6px 0; border: none; }
+            td { padding: 9px 0; border-top: 1px solid var(--divider-color); vertical-align: middle; }
+            hr { border: none; border-top: 1px solid var(--divider-color); margin: 10px 0; }
+      grid_options:
+        columns: 6

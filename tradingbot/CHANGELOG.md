@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+- Mehr Sensoren für das Home-Assistant-Dashboard „Aktien“: `sensor.tradingbot_unrealisiert` (offener Gewinn), `_bargeld`, `_rendite` (in % aufs Eingezahlte), `_heute` (Tagesänderung), `_drawdown` (Abstand zum Höchststand, mit Not-Aus-Grenze und Stop-Werten), `_marktstimmung` (Nachrichtenlage mit Schlagzeilen und Signalen je Aktie) und `_trades` (Anzahl, letzte 10 Trades).
+- `sensor.tradingbot_positionen` hat jetzt das Attribut `details` (Stück, Einstand, Kurs, Wert, Gewinn je Aktie), `sensor.tradingbot_status` zusätzlich Strategie, Watchlist und Zeit des letzten Laufs.
+
 ## 0.4.2
 - Strategien `trendfolger` und `aggressiv`: Eine einzelne schlechte Schlagzeile löst keinen Notverkauf mehr aus. Verkauft wird nur, wenn die Nachrichtenlage insgesamt schlecht ist (Schnitt ≤ −0,3) oder die Meldung verheerend (≤ −0,85).
 

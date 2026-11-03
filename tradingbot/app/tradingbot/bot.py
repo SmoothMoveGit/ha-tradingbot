@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from datetime import date, datetime
 
@@ -25,6 +26,7 @@ class TradingBot:
         self.storage = storage or Storage(cfg.db_path)
         self.risk = RiskManager(cfg, self.storage)
         self.news = NewsAnalyzer(cfg, self.storage, broker)
+        self.signals = {}
 
     def _own_positions(self):
         """Nur Positionen, die der Bot selbst eröffnet hat (manuelle Käufe bleiben unberührt)."""
@@ -86,10 +88,12 @@ class TradingBot:
             capital = self.risk.bot_capital()
             last = self.storage.recent_trades(1)
             bench = self._benchmark_value()
+            invested = sum(meta.values())
+            value = capital - invested + sum(p.market_value for p in positions.values())
             self.reporter.publish({
                 "benchmark_value": bench,
                 "benchmark": BENCHMARK_NAMES.get(self.cfg.benchmark, self.cfg.benchmark),
-                "value": capital - sum(meta.values()) + sum(p.market_value for p in positions.values()),
+                "value": value,
                 "capital": capital,
                 "realized_pnl": self.storage.realized_pnl(),
                 "positions": sorted(meta),
@@ -97,9 +101,65 @@ class TradingBot:
                 "mode": self.cfg.mode,
                 "halted": self.risk.halted,
                 "last_trade": f"{last[0][2]} {last[0][1]} ({last[0][0][:16]})" if last else None,
+                **self._details(positions, meta, value, capital, invested),
             })
         except Exception:
             log.exception("Status konnte nicht gemeldet werden")
+
+    def _details(self, positions, meta, value, capital, invested) -> dict:
+        """Zusätzliche Angaben für das Dashboard (Positionen, Trades, Nachrichten, Risiko)."""
+        r = self.cfg.risk
+        details = []
+        for sym in sorted(meta):
+            p, cost = positions.get(sym), meta[sym]
+            mv = p.market_value if p else cost
+            details.append({
+                "symbol": sym,
+                "stueck": round(p.qty, 4) if p else None,
+                "einstand": round(p.avg_entry_price, 2) if p else None,
+                "kurs": round(p.current_price, 2) if p else None,
+                "wert": round(mv, 2),
+                "gewinn": round(mv - cost, 2),
+                "prozent": round((mv / cost - 1) * 100, 2) if cost else 0.0,
+            })
+        trades = [
+            {"zeit": t, "symbol": sym, "art": "Kauf" if side == "buy" else "Verkauf", "stueck": round(qty, 4),
+             "preis": round(price, 2), "gewinn": round(pnl or 0.0, 2), "grund": reason}
+            for t, sym, side, qty, price, pnl, reason in self.storage.recent_trades(10)
+        ]
+        news = [
+            {"zeit": t, "symbol": "Markt" if sym == MARKET else sym, "bewertung": round(score, 2), "titel": h[:140]}
+            for t, sym, score, h in self.storage.recent_news(8)
+        ]
+        peak = max(float(self.storage.get("peak_value", value)), value)
+        day_start = float(self.storage.get("day_start_value", value))
+        return {
+            "positions_detail": details,
+            "invested": invested,
+            "cash": capital - invested,
+            "unrealized_pnl": value - capital,
+            "paid_in": r.start_budget + self.risk.deposits(),
+            "trades": trades,
+            "trade_count": self.storage.trade_count(),
+            "market_sentiment": self.news.score(MARKET),
+            "news_scores": {s: round(self.news.score(s), 2) for s in self.cfg.watchlist},
+            "news": news,
+            "signals": {s: {"trend": round(x.trend, 2), "news": round(x.news, 2), "gesamt": round(x.score, 2)}
+                        for s, x in self.signals.items()},
+            "peak_value": peak,
+            "drawdown_pct": (1 - value / peak) * 100 if peak else 0.0,
+            "day_change_pct": (value / day_start - 1) * 100 if day_start else 0.0,
+            "max_drawdown_pct": r.max_drawdown_pct * 100,
+            "daily_loss_limit_pct": r.daily_loss_limit_pct * 100,
+            "stop_loss_pct": r.stop_loss_pct * 100,
+            "trailing_stop_pct": r.trailing_stop_pct * 100,
+            "take_profit_pct": r.take_profit_pct * 100,
+            "max_positions": r.max_positions,
+            "strategy": os.getenv("TRADINGBOT_PROFILE") or "standard",
+            "watchlist": list(self.cfg.watchlist),
+            "interval_minutes": self.cfg.interval_minutes,
+            "last_run": datetime.now().astimezone().isoformat(timespec="seconds"),
+        }
 
     def _benchmark_value(self) -> float | None:
         """Was Startbudget und Einzahlungen wert wären, hätte man sie jeweils in den Vergleichs-ETF gesteckt."""
@@ -171,6 +231,7 @@ class TradingBot:
                 log.exception("Kursdaten für %s fehlen", sym)
                 continue
             signals[sym] = combine(sym, trend_score(bars, st.sma_fast, st.sma_slow), self.news.score(sym), market, self.cfg)
+        self.signals = signals
 
         # 1) Verkäufe
         for sym, pos in positions.items():
