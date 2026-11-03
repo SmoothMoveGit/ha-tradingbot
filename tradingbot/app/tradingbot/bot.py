@@ -204,6 +204,8 @@ class TradingBot:
             return
         if deposit := self.risk.apply_deposits(today):
             log.info("Monatliche Einzahlung gebucht: +%.2f $, Kapital jetzt %.2f $", deposit, self.risk.bot_capital())
+        if extra := self.risk.apply_extra_deposits():
+            log.info("Sonderzahlung gebucht: +%.2f $, Kapital jetzt %.2f $", extra, self.risk.bot_capital())
         try:
             self.news.refresh()
         except Exception:

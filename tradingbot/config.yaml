@@ -1,5 +1,5 @@
 name: Tradingbot
-version: "0.5.2"
+version: "0.5.3"
 slug: tradingbot
 description: Autonomer Aktien-Tradingbot mit Nachrichtenanalyse (startet im Paper-Modus)
 url: https://github.com/SmoothMoveGit/ha-tradingbot
@@ -25,6 +25,7 @@ schema:
   mode: list(paper|live|sim)
   start_budget: float(10,)
   monthly_deposit: float(0,)
+  extra_deposit: float(0,)?
   strategy: list(standard|trendfolger|aggressiv)
   notify_service: str?
   anthropic_api_key: password?

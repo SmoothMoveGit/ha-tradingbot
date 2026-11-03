@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.3
+- Neue Option *Sonderzahlungen gesamt*: Einmalzahlungen erhöhen das Kapital des Bots, der ETF-Vergleich kauft mit demselben Betrag am selben Tag nach.
+
 ## 0.5.2
 - Claude-Bewertung robuster: Ergebnisse werden über die Nummer der Meldung zugeordnet, kleinere Pakete (20 statt 40). Fehlt eine einzelne Bewertung, wird nur diese Meldung einfach bewertet statt das ganze Paket.
 

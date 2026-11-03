@@ -14,6 +14,9 @@ configuration:
   monthly_deposit:
     name: Monatliche Einzahlung (USD)
     description: Wird jeden Monat zum Kapital addiert (auch im Backtest). 0 = keine.
+  extra_deposit:
+    name: Sonderzahlungen gesamt (USD)
+    description: Summe aller Einmalzahlungen. Erhöhst du den Wert, wird die Differenz einmal zum Kapital gebucht (der ETF-Vergleich kauft zum selben Tag nach).
   strategy:
     name: Strategie
     description: "standard = kurzer Trend, enge Stops. trendfolger = langer Trend 50/200, Stops 15 %. aggressiv = wie trendfolger, aber 3 große Positionen, keine Reserve, Not-Aus erst bei 50 % Verlust."

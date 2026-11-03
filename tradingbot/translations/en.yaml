@@ -11,6 +11,9 @@ configuration:
   monthly_deposit:
     name: Monthly deposit (USD)
     description: Added to the capital every month (also in the backtest). 0 = none.
+  extra_deposit:
+    name: One-off deposits total (USD)
+    description: Sum of all one-off deposits. Raising it books the difference once.
   strategy:
     name: Strategy
     description: "standard = short trend, tight stops. trendfolger = long trend 50/200, 15 % stops. aggressiv = like trendfolger, but 3 large positions, no cash reserve, emergency stop at 50 % loss."

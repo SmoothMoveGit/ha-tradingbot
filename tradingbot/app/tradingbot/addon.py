@@ -23,6 +23,7 @@ def main() -> int:
         "TRADINGBOT_DB_PATH": "/data/tradingbot.db",
         "TRADINGBOT_NOTIFY_SERVICE": opts.get("notify_service", ""),
         "TRADINGBOT_MONTHLY_DEPOSIT": str(opts.get("monthly_deposit", "")),
+        "TRADINGBOT_EXTRA_DEPOSIT": str(opts.get("extra_deposit", "")),
         "TRADINGBOT_PROFILE": opts.get("strategy", ""),
     }
     if opts.get("anthropic_api_key"):

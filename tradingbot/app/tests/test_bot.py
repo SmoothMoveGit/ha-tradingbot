@@ -293,6 +293,23 @@ def test_monthly_deposits(tmp_path):
     assert rm.bot_capital() == cfg.risk.start_budget + 110
 
 
+def test_extra_deposits_booked_once(tmp_path):
+    from tradingbot.config import Config
+    from tradingbot.risk import RiskManager
+    from tradingbot.storage import Storage
+    cfg = Config()
+    cfg.risk.extra_deposits = 735
+    st = Storage(str(tmp_path / "t.db"))
+    rm = RiskManager(cfg, st)
+    assert rm.apply_extra_deposits() == 735
+    assert rm.apply_extra_deposits() == 0  # Neustart bucht nicht doppelt
+    cfg.risk.extra_deposits = 1000
+    assert rm.apply_extra_deposits() == 265
+    cfg.risk.extra_deposits = 500  # Senken bucht nichts
+    assert rm.apply_extra_deposits() == 0
+    assert rm.bot_capital() == cfg.risk.start_budget + 1000
+
+
 def test_leveraged_series_doubles_daily_moves():
     from datetime import datetime, timedelta, timezone
     from tradingbot.backtest import leveraged

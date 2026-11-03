@@ -24,6 +24,7 @@ class RiskConfig:
     min_order_value: float = 10.0
     rebuy_cooldown_days: int = 2          # nach Verkauf diese Aktie so lange nicht wieder kaufen
     monthly_deposit: float = 0.0          # Einzahlung pro Monat (USD), erhöht das Kapital des Bots
+    extra_deposits: float = 0.0           # Sonderzahlungen insgesamt (USD), neuer Teil wird einmal gebucht
     broker_stops: bool = True             # Stop-Order zusätzlich beim Broker hinterlegen
 
 
@@ -150,6 +151,8 @@ def load_config(path: str | Path | None = None) -> Config:
         cfg.risk.start_budget = float(os.environ["TRADINGBOT_START_BUDGET"])
     if os.getenv("TRADINGBOT_MONTHLY_DEPOSIT"):
         cfg.risk.monthly_deposit = float(os.environ["TRADINGBOT_MONTHLY_DEPOSIT"])
+    if os.getenv("TRADINGBOT_EXTRA_DEPOSIT"):
+        cfg.risk.extra_deposits = float(os.environ["TRADINGBOT_EXTRA_DEPOSIT"])
     if os.getenv("TRADINGBOT_DB_PATH"):
         cfg.db_path = os.environ["TRADINGBOT_DB_PATH"]
     if os.getenv("ANTHROPIC_API_KEY") and os.getenv("TRADINGBOT_SENTIMENT"):

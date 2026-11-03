@@ -60,6 +60,10 @@ Vor Quartalszahlen (Standard: 2 Tage) kauft der Bot die betroffene Aktie nicht n
 
 Option *Monatliche Einzahlung*: Der Betrag wird am Monatsanfang zum Kapital des Bots addiert. Im Paper-Modus ist das reine Buchhaltung (das Paper-Konto hat genug Spielgeld), im Live-Modus musst du das Geld selbst beim Broker einzahlen.
 
+## Sonderzahlung
+
+Option *Sonderzahlungen gesamt*: Summe aller Einmalzahlungen. Erhöhst du den Wert (z.B. von 0 auf 735), bucht der Bot die Differenz einmal zum Kapital. Der ETF-Vergleich kauft mit diesem Betrag am selben Tag nach, damit der Vergleich fair bleibt. Den Wert später nicht wieder senken, Auszahlungen werden nicht gebucht.
+
 ## Stop-Order bei Alpaca
 
 Für jede Position liegt zusätzlich eine Stop-Order bei Alpaca. Sie gilt bis Handelsschluss und wird jeden Handelstag erneuert. So greift der Stop-Loss auch, wenn der Bot kurz nicht läuft. Ist der Pi über Nacht oder mehrere Tage aus, fehlt der Schutz ab dem nächsten Handelstag.

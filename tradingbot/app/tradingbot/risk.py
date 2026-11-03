@@ -23,6 +23,16 @@ class RiskManager:
         self.storage.set("deposits_total", self.deposits() + amount)
         return amount
 
+    def apply_extra_deposits(self) -> float:
+        """Bucht den neuen Teil der Sonderzahlungen (Option ist die Summe aller Sonderzahlungen)."""
+        booked = float(self.storage.get("extra_deposits_booked", 0))
+        amount = self.r.extra_deposits - booked
+        if amount <= 0:
+            return 0.0
+        self.storage.set("extra_deposits_booked", self.r.extra_deposits)
+        self.storage.set("deposits_total", self.deposits() + amount)
+        return amount
+
     def bot_capital(self) -> float:
         """Startguthaben plus Einzahlungen plus realisierte Gewinne (falls erlaubt) bzw. minus Verluste."""
         pnl = self.storage.realized_pnl()
