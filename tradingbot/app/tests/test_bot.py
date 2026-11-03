@@ -512,3 +512,10 @@ def test_intraday_sim_returns_only_past_bars_of_recent_days():
     sim.set_time(now)
     assert sim.intraday_bars(["AAA"], now)["AAA"] == bars[78:91]
     assert sim.intraday_bars(["AAA"], now, days=1)["AAA"] == bars[:91]
+
+
+def test_daytrader_backtest_counts_exit_reasons():
+    from tradingbot.daytrader import BREAKOUT, DayConfig, backtest
+    rise = [100] * 6 + [100 + 0.2 * i for i in range(1, 70)]
+    res = backtest(DayConfig(watchlist=["AAA"], start_budget=1000, **BREAKOUT), {"AAA": _day_bars(rise[:78])})
+    assert sum(res["exits"].values()) == res["trades"]

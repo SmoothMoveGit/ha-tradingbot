@@ -115,11 +115,13 @@ def daytrade(cfg) -> int:
                 ("Ausbruch (alt)", BREAKOUT),
             ]
             for name, over in variants:
-                c = config_from_env(cfg.watchlist, **over)
+                over = dict(over)
+                c = config_from_env(over.pop("watchlist", cfg.watchlist), **over)
                 r = day_backtest(c, {s: bars.get(s, []) for s in c.watchlist}, test_days=40)
                 log.info("DAYTRADER-BACKTEST %s, %d Handelstage: %.2f $ -> %.2f $ (%+.1f%%), %d Trades, %.0f%% Gewinner, "
                          "Schnitt Gewinn %+.2f $ / Verlust %+.2f $", name, r["days"], r["start"], r["end"],
                          (r["end"] / r["start"] - 1) * 100, r["trades"], r["win_rate"] * 100, r["avg_win"], r["avg_loss"])
+                log.info("DAYTRADER-AUSSTIEGE %s: %s", name, ", ".join(f"{k} {v}" for k, v in r["exits"].items()))
                 if r["stats"]:
                     log.info("DAYTRADER-FILTER %s: %s", name,
                              ", ".join(f"{k} {v}" for k, v in sorted(r["stats"].items(), key=lambda kv: -kv[1])))

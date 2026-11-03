@@ -495,13 +495,18 @@ def backtest(cfg: DayConfig, bars: dict[str, list[Bar]], test_days: int | None =
         days.add(t.astimezone(NY).date())
         sim.set_time(t)
         bot.cycle(t)
-    sells = [p for (p,) in bot.storage.db.execute("SELECT pnl FROM trades WHERE side='sell'").fetchall()]
+    rows = bot.storage.db.execute("SELECT pnl, reason FROM trades WHERE side='sell'").fetchall()
+    sells = [p for p, _ in rows]
+    exits: dict[str, int] = {}
+    for _, reason in rows:
+        key = (reason or "?").split(" ")[0]
+        exits[key] = exits.get(key, 0) + 1
     wins = [p for p in sells if p > 0]
     losses = [p for p in sells if p <= 0]
     return {"start": cfg.start_budget, "end": bot.capital(), "days": len(days), "trades": len(sells),
             "win_rate": len(wins) / len(sells) if sells else 0.0,
             "avg_win": sum(wins) / len(wins) if wins else 0.0,
-            "avg_loss": sum(losses) / len(losses) if losses else 0.0, "stats": bot.stats}
+            "avg_loss": sum(losses) / len(losses) if losses else 0.0, "stats": bot.stats, "exits": exits}
 
 
 def config_from_env(watchlist: list, **overrides) -> DayConfig:

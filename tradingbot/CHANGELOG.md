@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.3
+- Varianten-Backtest: Fehler bei den Varianten mit 25 Aktien behoben, zusätzlich wird gezählt, wie Trades enden (Kursziel, Stop, Handelsschluss).
+
 ## 0.7.2
 - Daytrader: Filter des Regelwerks sind jetzt einstellbar (RSI-Bereich, EMA-Abstand, VWAP-Kreuzungen, Abstand zur EMA 9, Volumen, Widerstand, Gültigkeit des Einstiegs). Gehandelt wird weiter mit dem unveränderten Regelwerk.
 - Beim Start vergleicht ein Backtest über 40 Handelstage sieben Varianten (u. a. gelockert, 5-Minuten-Kerzen, 25 statt 10 Aktien) und zählt, an welcher Regel Signale scheitern. Läuft im Hintergrund, der Daytrader handelt sofort.
