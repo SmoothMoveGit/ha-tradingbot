@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.2
+- Daytrader: Filter des Regelwerks sind jetzt einstellbar (RSI-Bereich, EMA-Abstand, VWAP-Kreuzungen, Abstand zur EMA 9, Volumen, Widerstand, Gültigkeit des Einstiegs). Gehandelt wird weiter mit dem unveränderten Regelwerk.
+- Beim Start vergleicht ein Backtest über 40 Handelstage sieben Varianten (u. a. gelockert, 5-Minuten-Kerzen, 25 statt 10 Aktien) und zählt, an welcher Regel Signale scheitern. Läuft im Hintergrund, der Daytrader handelt sofort.
+
 ## 0.7.1
 - Nachkauf funktioniert bei Alpaca: der offene Stop wird vor dem Kauf entfernt und danach neu gesetzt (Alpaca lehnte sonst als „wash trade“ ab).
 - Quartalszahlen-Kalender: browserähnliche Anfrage an Nasdaq, nach einem Fehler erst nach einer Stunde neuer Versuch.

@@ -489,3 +489,26 @@ def test_daytrader_breakout_backtest_is_flat_at_close():
     assert res["days"] == 1
     assert res["trades"] >= 1
     assert res["end"] > 1000
+
+
+def test_daytrader_loose_rules_and_filter_stats():
+    from tradingbot.daytrader import LOOSE, DayConfig, pullback_setup
+    weak = _pullback_bars(confirm_volume=900)  # knapp unter dem Schnitt
+    stats = {}
+    assert pullback_setup(weak, DayConfig(watchlist=["AAA"]), stats) is None
+    assert stats == {"zu wenig Volumen": 1}
+    loose = DayConfig(watchlist=["AAA"], **LOOSE)
+    plan = pullback_setup(weak, loose, stats)
+    assert plan and stats["Signal"] == 1
+    # Einstieg bleibt im gelockerten Regelwerk zwei Kerzen gültig
+    assert plan["expires"] - weak[-1].time == 3 * timedelta(minutes=15)
+
+
+def test_intraday_sim_returns_only_past_bars_of_recent_days():
+    from tradingbot.daytrader import IntradaySim
+    bars = _day_bars([100] * 78, day=(2026, 11, 2)) + _day_bars([101] * 78, day=(2026, 11, 3))
+    sim = IntradaySim({"AAA": bars}, 1000)
+    now = bars[90].time + timedelta(minutes=5)
+    sim.set_time(now)
+    assert sim.intraday_bars(["AAA"], now)["AAA"] == bars[78:91]
+    assert sim.intraday_bars(["AAA"], now, days=1)["AAA"] == bars[:91]

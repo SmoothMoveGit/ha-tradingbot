@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import time
+from bisect import bisect_left
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -20,6 +21,8 @@ from .homeassistant import Reporter
 from .storage import Storage
 
 log = logging.getLogger("tradingbot.daytrader")
+QUIET = logging.getLogger("tradingbot.daytrader.backtest")
+QUIET.setLevel(logging.WARNING)
 NY = ZoneInfo("America/New_York")
 
 
@@ -38,6 +41,14 @@ class DayConfig:
     max_trades_per_day: int = 3
     max_losses_in_row: int = 2
     max_position_pct: float = 0.34
+    rsi_min: float = 50.0
+    rsi_max: float = 70.0
+    min_ema_gap: float = 0.0005         # EMA 9 mindestens so weit über EMA 21 (Anteil vom Kurs)
+    max_vwap_crosses: int = 4           # ab so vielen VWAP-Kreuzungen in 8 Kerzen = Seitwärtsmarkt
+    pullback_tol: float = 0.001         # Tief muss bis auf diesen Abstand an die EMA 9 kommen
+    vol_factor: float = 1.0             # Volumen der Signalkerze > Faktor x Schnitt der letzten 20
+    resistance_filter: bool = True
+    entry_valid_bars: int = 1           # so viele Kerzen bleibt der Einstieg gültig
     # Ausbruch-Variante
     take_profit_pct: float = 0.015
     stop_loss_pct: float = 0.010
@@ -53,6 +64,14 @@ class DayConfig:
     min_order_value: float = 10.0
     earnings_guard_days: int = 1
 
+
+# Zusätzliche, sehr liquide US-Werte: mehr Kandidaten heißt mehr Signale, ohne die Regeln aufzuweichen
+EXTRA_SYMBOLS = ["AMD", "AVGO", "TSLA", "NFLX", "ORCL", "CRM", "COST", "WMT", "XOM", "UNH",
+                 "MA", "HD", "PG", "LLY", "BAC"]
+
+# Gelockerte Fassung des Regelwerks (Michi hat Anpassungen freigegeben, 2026-11-03)
+LOOSE = {"rsi_min": 45.0, "rsi_max": 75.0, "min_ema_gap": 0.0002, "max_vwap_crosses": 6,
+         "pullback_tol": 0.003, "vol_factor": 0.8, "entry_valid_bars": 2}
 
 BREAKOUT = {"strategy": "breakout", "bar_minutes": 5, "max_positions": 5, "max_position_pct": 0.20,
             "daily_loss_limit_pct": 0.03, "max_trades_per_day": 99, "max_losses_in_row": 99}
@@ -133,8 +152,13 @@ def bullish_confirmation(c: Bar, prev: Bar) -> bool:
     return strong_green or engulfing or hammer
 
 
-def pullback_setup(bars: list[Bar], cfg: DayConfig) -> dict | None:
-    """Long-Setup Trend-Pullback (Regelwerk Abschnitt 2 und 6). bars: fertige Kerzen, mehrere Tage."""
+def pullback_setup(bars: list[Bar], cfg: DayConfig, stats: dict | None = None) -> dict | None:
+    """Long-Setup Trend-Pullback (Regelwerk Abschnitt 2 und 6). bars: fertige Kerzen, mehrere Tage.
+    stats zählt, an welcher Regel ein Setup scheitert (für die Auswertung im Backtest)."""
+    def no(reason: str):
+        if stats is not None:
+            stats[reason] = stats.get(reason, 0) + 1
+        return None
     if len(bars) < 30:
         return None
     today = session_of(bars[-1])
@@ -147,28 +171,32 @@ def pullback_setup(bars: list[Bar], cfg: DayConfig) -> dict | None:
     v = vwap(session)
     a = atr(bars[-30:])
     r = rsi(closes[-60:])
-    if not (c.close > v and e9[-1] > e21[-1] and e9[-1] > e9[-2] and e21[-1] > e21[-2] and 50 <= r <= 70):
-        return None
+    if c.close <= v:
+        return no("unter VWAP")
+    if not (e9[-1] > e21[-1] and e9[-1] > e9[-2] and e21[-1] > e21[-2]):
+        return no("kein EMA-Aufwärtstrend")
+    if not cfg.rsi_min <= r <= cfg.rsi_max:
+        return no("RSI außerhalb")
     # Seitwärtsmarkt: Kurs kreuzt VWAP ständig oder EMAs liegen ineinander
     crosses = sum(1 for x, y in zip(session[-8:], session[-7:]) if (x.close - v) * (y.close - v) < 0)
-    if crosses >= 4 or (e9[-1] - e21[-1]) / c.close < 0.0005:
-        return None
+    if crosses >= cfg.max_vwap_crosses or (e9[-1] - e21[-1]) / c.close < cfg.min_ema_gap:
+        return no("Seitwärtsmarkt")
     # Rücklauf zur EMA 9/21 in den letzten Kerzen, ohne Schluss unter EMA 21
     recent = range(len(bars) - 4, len(bars))
-    if not any(bars[i].low <= e9[i] * 1.001 for i in recent):
-        return None
+    if not any(bars[i].low <= e9[i] * (1 + cfg.pullback_tol) for i in recent):
+        return no("kein Rücklauf zur EMA 9")
     if any(bars[i].close < e21[i] for i in recent):
-        return None
+        return no("Schluss unter EMA 21")
     if not bullish_confirmation(c, prev):
-        return None
+        return no("keine Bestätigungskerze")
     vols = [b.volume for b in bars[-21:-1]]
-    if vols and c.volume <= sum(vols) / len(vols):
-        return None
+    if vols and c.volume <= cfg.vol_factor * sum(vols) / len(vols):
+        return no("zu wenig Volumen")
     trigger = c.high * 1.0005
     stop = min(b.low for b in bars[-4:]) - cfg.atr_stop_buffer * a
     risk = trigger - stop
     if risk <= 0 or risk / trigger < cfg.min_risk_pct:
-        return None
+        return no("Stop zu eng")
     target = trigger + cfg.reward_risk * risk
     # markanter Widerstand direkt darüber (Tageshoch oder Vortageshoch zwischen Einstieg und 1R)
     highs = [max(b.high for b in session[:-1])] if len(session) > 1 else []
@@ -176,9 +204,11 @@ def pullback_setup(bars: list[Bar], cfg: DayConfig) -> dict | None:
     if prev_day:
         last = session_of(prev_day[-1])
         highs.append(max(b.high for b in prev_day if session_of(b) == last))
-    if any(trigger < h < trigger + risk for h in highs):
-        return None
-    return {"trigger": trigger, "stop": stop, "target": target, "atr": a, "expires": c.time + 2 * (c.time - prev.time),
+    if cfg.resistance_filter and any(trigger < h < trigger + risk for h in highs):
+        return no("Widerstand darüber")
+    if stats is not None:
+        stats["Signal"] = stats.get("Signal", 0) + 1
+    return {"trigger": trigger, "stop": stop, "target": target, "atr": a, "expires": c.time + (1 + cfg.entry_valid_bars) * (c.time - prev.time),
             "why": f"Pullback RSI {r:.0f}, Vol {c.volume / (sum(vols) / len(vols)):.1f}x" if vols else "Pullback"}
 
 
@@ -206,6 +236,9 @@ class DayTrader:
         self.earnings = earnings
         self.status = "gestartet"
         self.pending: dict[str, dict] = {}
+        self.log = log
+        self.stats: dict | None = None  # im Backtest: Gründe, warum kein Setup entstand
+        self._seen: dict[str, datetime] = {}
 
     def capital(self) -> float:
         return self.cfg.start_budget + self.storage.realized_pnl()
@@ -229,7 +262,7 @@ class DayTrader:
         d["pnl"] += pnl
         d["losses_in_row"] = d["losses_in_row"] + 1 if pnl < 0 else 0
         self._save_day(today, d)
-        log.info("VERKAUF %s %.4f @ %.2f | %s | G/V %+.2f", sym, fill.qty, fill.price, reason, pnl)
+        self.log.info("VERKAUF %s %.4f @ %.2f | %s | G/V %+.2f", sym, fill.qty, fill.price, reason, pnl)
 
     def _sell(self, sym: str, reason: str, meta: dict, now: datetime) -> None:
         fill = self.broker.sell_all(sym)
@@ -293,12 +326,18 @@ class DayTrader:
         soon = {}
         if self.earnings and c.strategy == "pullback":
             soon = self.earnings.upcoming(c.watchlist, today, c.earnings_guard_days)
-        setup = breakout_setup if c.strategy == "breakout" else pullback_setup
         for sym in c.watchlist:
             bars5 = raw.get(sym, [])
             if not bars5 or sym in meta or sym in soon:
                 continue
-            plan = setup(aggregate(bars5, c.bar_minutes, now), c)
+            bars = aggregate(bars5, c.bar_minutes, now)
+            if c.strategy == "breakout":
+                plan = breakout_setup(bars, c)
+            else:
+                new_bar = bool(bars) and self._seen.get(sym) != bars[-1].time  # jede Kerze nur einmal zählen
+                plan = pullback_setup(bars, c, self.stats if new_bar else None)
+                if bars:
+                    self._seen[sym] = bars[-1].time
             if plan and (sym not in self.pending or self.pending[sym]["trigger"] != plan["trigger"]):
                 self.pending[sym] = plan
 
@@ -336,7 +375,7 @@ class DayTrader:
             reason = f"{plan['why']}, Stop {plan['stop']:.2f}, Ziel {plan['target']:.2f}"
             self.storage.record_trade(sym, "buy", fill.qty, fill.price, reason, when=now)
             self.broker.ensure_stop(sym, fill.qty, plan["stop"])
-            log.info("KAUF %s %.4f @ %.2f (%.2f) | %s", sym, fill.qty, fill.price, cost, reason)
+            self.log.info("KAUF %s %.4f @ %.2f (%.2f) | %s", sym, fill.qty, fill.price, cost, reason)
 
     def publish(self) -> None:
         try:
@@ -354,16 +393,16 @@ class DayTrader:
                 "status": self.status, "trade_count": self.storage.trade_count(), "trades": trades,
             })
         except Exception:
-            log.exception("Daytrader-Status konnte nicht gemeldet werden")
+            self.log.exception("Daytrader-Status konnte nicht gemeldet werden")
 
     def run_forever(self) -> None:
-        log.info("Daytrader gestartet (%s), Startbudget %.2f $, Intervall %d min",
+        self.log.info("Daytrader gestartet (%s), Startbudget %.2f $, Intervall %d min",
                  self.cfg.strategy, self.cfg.start_budget, self.cfg.interval_minutes)
         while True:
             try:
                 self.cycle()
             except Exception:
-                log.exception("Fehler im Daytrader-Zyklus")
+                self.log.exception("Fehler im Daytrader-Zyklus")
             self.publish()
             time.sleep(self.cfg.interval_minutes * 60)
 
@@ -378,6 +417,7 @@ class IntradaySim:
         self.holdings: dict[str, tuple[float, float]] = {}
         self.now = None
         self.idx = {s: 0 for s in bars}
+        self._times = {s: [b.time for b in bs] for s, bs in bars.items()}
 
     def set_time(self, now: datetime) -> None:
         self.now = now
@@ -398,9 +438,13 @@ class IntradaySim:
         return (n.replace(hour=16, minute=0, second=0, microsecond=0) - n).total_seconds() / 60
 
     def intraday_bars(self, symbols, now, days: int = 0) -> dict[str, list[Bar]]:
-        first = now.astimezone(NY).date() - timedelta(days=days)
-        return {s: [b for b in self.bars.get(s, [])[: self.idx.get(s, 0)] if session_of(b) >= first]
-                for s in symbols}
+        d = now.astimezone(NY).date() - timedelta(days=days)
+        first = datetime(d.year, d.month, d.day, tzinfo=NY)
+        out = {}
+        for s in symbols:
+            bs = self.bars.get(s, [])
+            out[s] = bs[bisect_left(self._times[s], first) if s in self._times else 0: self.idx.get(s, 0)]
+        return out
 
     def positions(self) -> dict[str, Position]:
         return {s: Position(s, q, p, self._price(s)) for s, (q, p) in self.holdings.items()}
@@ -438,6 +482,8 @@ def backtest(cfg: DayConfig, bars: dict[str, list[Bar]], test_days: int | None =
     zum Einlaufen der Indikatoren, wenn test_days gesetzt ist."""
     sim = IntradaySim(bars, cfg.start_budget)
     bot = DayTrader(cfg, sim, Storage(":memory:"))
+    bot.stats = {}
+    bot.log = QUIET  # Backtest-Trades nicht ins Protokoll, sonst sehen sie echt aus
     times = sorted({b.time + timedelta(minutes=5) for bs in bars.values() for b in bs
                     if (9, 30) <= (b.time.astimezone(NY).hour, b.time.astimezone(NY).minute) < (16, 0)})
     all_days = sorted({t.astimezone(NY).date() for t in times})
@@ -445,22 +491,17 @@ def backtest(cfg: DayConfig, bars: dict[str, list[Bar]], test_days: int | None =
         start = all_days[-test_days] if len(all_days) >= test_days else all_days[0]
         times = [t for t in times if t.astimezone(NY).date() >= start]
     days = set()
-    level = log.level
-    log.setLevel(logging.WARNING)  # Backtest-Trades nicht ins Protokoll, sonst sehen sie echt aus
-    try:
-        for t in times:
-            days.add(t.astimezone(NY).date())
-            sim.set_time(t)
-            bot.cycle(t)
-    finally:
-        log.setLevel(level)
+    for t in times:
+        days.add(t.astimezone(NY).date())
+        sim.set_time(t)
+        bot.cycle(t)
     sells = [p for (p,) in bot.storage.db.execute("SELECT pnl FROM trades WHERE side='sell'").fetchall()]
     wins = [p for p in sells if p > 0]
     losses = [p for p in sells if p <= 0]
     return {"start": cfg.start_budget, "end": bot.capital(), "days": len(days), "trades": len(sells),
             "win_rate": len(wins) / len(sells) if sells else 0.0,
             "avg_win": sum(wins) / len(wins) if wins else 0.0,
-            "avg_loss": sum(losses) / len(losses) if losses else 0.0}
+            "avg_loss": sum(losses) / len(losses) if losses else 0.0, "stats": bot.stats}
 
 
 def config_from_env(watchlist: list, **overrides) -> DayConfig:

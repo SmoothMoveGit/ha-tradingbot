@@ -94,21 +94,40 @@ def backtest(cfg, years: float, variants: bool = False) -> int:
 def daytrade(cfg) -> int:
     """Zweiter Bot (nur Spielgeld): erst Backtest der letzten Wochen, dann Daytrading."""
     from .broker.alpaca import AlpacaBroker
-    from .daytrader import BREAKOUT, DayTrader, backtest as day_backtest, config_from_env
+    import threading
+    from .daytrader import BREAKOUT, EXTRA_SYMBOLS, LOOSE, DayTrader, backtest as day_backtest, config_from_env
     from .earnings import EarningsCalendar
     from .homeassistant import HomeAssistantReporter
     dcfg = config_from_env(cfg.watchlist)
     broker = AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)  # Daytrader nie mit echtem Geld
     log = logging.getLogger("tradingbot.daytrader")
-    try:
-        bars = broker.intraday_bars(dcfg.watchlist, days=40)
-        for name, c in (("Pullback-Regelwerk", dcfg), ("Ausbruch (alt)", config_from_env(cfg.watchlist, **BREAKOUT))):
-            r = day_backtest(c, bars, test_days=20)
-            log.info("DAYTRADER-BACKTEST %s, %d Handelstage: %.2f $ -> %.2f $ (%+.1f%%), %d Trades, %.0f%% Gewinner, "
-                     "Schnitt Gewinn %+.2f $ / Verlust %+.2f $", name, r["days"], r["start"], r["end"],
-                     (r["end"] / r["start"] - 1) * 100, r["trades"], r["win_rate"] * 100, r["avg_win"], r["avg_loss"])
-    except Exception as e:
-        log.warning("Daytrader-Backtest fehlgeschlagen: %s", e)
+    def compare() -> None:
+        try:
+            wide = list(dict.fromkeys(dcfg.watchlist + EXTRA_SYMBOLS))
+            bars = broker.intraday_bars(wide, days=70)
+            variants = [
+                ("Regelwerk (aktuell)", {}),
+                ("locker", LOOSE),
+                ("locker ohne Widerstand", {**LOOSE, "resistance_filter": False}),
+                ("locker 5-min-Kerzen", {**LOOSE, "bar_minutes": 5}),
+                ("Regelwerk 25 Aktien", {"watchlist": wide}),
+                ("locker 25 Aktien", {**LOOSE, "watchlist": wide}),
+                ("Ausbruch (alt)", BREAKOUT),
+            ]
+            for name, over in variants:
+                c = config_from_env(cfg.watchlist, **over)
+                r = day_backtest(c, {s: bars.get(s, []) for s in c.watchlist}, test_days=40)
+                log.info("DAYTRADER-BACKTEST %s, %d Handelstage: %.2f $ -> %.2f $ (%+.1f%%), %d Trades, %.0f%% Gewinner, "
+                         "Schnitt Gewinn %+.2f $ / Verlust %+.2f $", name, r["days"], r["start"], r["end"],
+                         (r["end"] / r["start"] - 1) * 100, r["trades"], r["win_rate"] * 100, r["avg_win"], r["avg_loss"])
+                if r["stats"]:
+                    log.info("DAYTRADER-FILTER %s: %s", name,
+                             ", ".join(f"{k} {v}" for k, v in sorted(r["stats"].items(), key=lambda kv: -kv[1])))
+        except Exception as e:
+            log.warning("Daytrader-Backtest fehlgeschlagen: %s", e)
+
+    # Vergleich im Hintergrund, damit der Daytrader sofort handelt (dauert auf dem Pi einige Minuten)
+    threading.Thread(target=compare, name="daytrader-backtest", daemon=True).start()
     storage = Storage(cfg.db_path)
     DayTrader(dcfg, broker, storage, HomeAssistantReporter.from_env(), EarningsCalendar(storage)).run_forever()
     return 0
