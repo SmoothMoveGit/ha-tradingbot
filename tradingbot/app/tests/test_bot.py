@@ -437,18 +437,48 @@ def _day_bars(prices, day=(2026, 11, 2)):
     return [Bar(t0 + timedelta(minutes=5 * i), p, p * 1.001, p * 0.999, p, 1000) for i, p in enumerate(prices)]
 
 
-def test_daytrader_entry_signal():
-    from tradingbot.daytrader import DayConfig, entry_signal
+def _pullback_bars(confirm_volume=2500):
+    """Drei Tage 15-Minuten-Kerzen: Aufwärtstrend, Rücklauf zur EMA 9, kräftige grüne Kerze."""
+    from zoneinfo import ZoneInfo
+    from tradingbot.broker.base import Bar
+    ny, out, p = ZoneInfo("America/New_York"), [], 100.0
+    for d, day in enumerate([3, 4, 5]):
+        t0 = datetime(2026, 11, day, 9, 30, tzinfo=ny)
+        for i in range(26 if d < 2 else 10):
+            step = (0.12 if i % 5 < 3 else -0.1) if d < 2 else (0.12 if i % 2 == 0 else -0.04)
+            o, p = p, p + step
+            out.append(Bar(t0 + timedelta(minutes=15 * i), o, max(o, p) + 0.03, min(o, p) - 0.03, p, 1000))
+    t = out[-1].time
+    for _ in range(2):
+        o, p, t = p, p - 0.07, t + timedelta(minutes=15)
+        out.append(Bar(t, o, o + 0.02, p - 0.05, p, 800))
+    o, p, t = p, p + 0.3, t + timedelta(minutes=15)
+    out.append(Bar(t, o, p + 0.01, o - 0.02, p, confirm_volume))
+    return out
+
+
+def test_daytrader_pullback_setup():
+    from tradingbot.daytrader import DayConfig, pullback_setup
     cfg = DayConfig(watchlist=["AAA"])
-    assert entry_signal(_day_bars([100] * 10 + [100.5]), cfg) is not None
-    assert entry_signal(_day_bars([100] * 11), cfg) is None
-    assert entry_signal(_day_bars([102, 101, 100, 100, 100, 100, 100, 100.2]), cfg) is None  # unter VWAP
+    plan = pullback_setup(_pullback_bars(), cfg)
+    assert plan and plan["stop"] < plan["trigger"] < plan["target"]
+    assert plan["target"] - plan["trigger"] == pytest.approx(2 * (plan["trigger"] - plan["stop"]))
+    assert pullback_setup(_pullback_bars(confirm_volume=500), cfg) is None  # Volumen zu schwach
 
 
-def test_daytrader_backtest_takes_profit_and_is_flat_at_close():
-    from tradingbot.daytrader import DayConfig, backtest
+def test_daytrader_aggregates_only_finished_15min_bars():
+    from zoneinfo import ZoneInfo
+    from tradingbot.daytrader import aggregate
+    bars = _day_bars([100, 101, 102, 103, 104])  # 9:30 bis 9:50
+    now = datetime(2026, 11, 2, 9, 55, tzinfo=ZoneInfo("America/New_York"))
+    agg = aggregate(bars, 15, now)
+    assert len(agg) == 1 and agg[0].open == 100 and agg[0].close == 102 and agg[0].volume == 3000
+
+
+def test_daytrader_breakout_backtest_is_flat_at_close():
+    from tradingbot.daytrader import BREAKOUT, DayConfig, backtest
     rise = [100] * 6 + [100 + 0.2 * i for i in range(1, 70)]  # steigt den ganzen Tag
-    res = backtest(DayConfig(watchlist=["AAA"], start_budget=1000), {"AAA": _day_bars(rise[:78])})
+    res = backtest(DayConfig(watchlist=["AAA"], start_budget=1000, **BREAKOUT), {"AAA": _day_bars(rise[:78])})
     assert res["days"] == 1
     assert res["trades"] >= 1
     assert res["end"] > 1000

@@ -1,11 +1,13 @@
-"""Zweiter Bot zum Vergleich: Daytrading mit 5-Minuten-Kursen.
+"""Zweiter Bot zum Vergleich: Daytrading (nur Spielgeld, eigenes Alpaca-Konto).
 
-Kauft Ausbrüche über das Hoch der letzten halben Stunde (Kurs über dem Tagesdurchschnitt VWAP),
-verkauft bei kleinem Gewinn oder Verlust und ist zum Handelsschluss immer komplett draußen.
-Eigenes Alpaca-Konto, eigene Datenbank, eigene Sensoren (sensor.daytrader_*).
+Standard ist Michis Regelwerk "Trend-Pullback" auf 15-Minuten-Kerzen (VWAP, EMA 9/21, RSI 14, ATR 14,
+Volumen, Bestätigungskerze, Chance-Risiko 2:1, Risiko 0,5 % je Trade). Die frühere einfache
+Ausbruch-Variante bleibt für den Vergleich im Backtest erhalten. Nur Long, keine Leerverkäufe.
+Eigene Datenbank, eigene Sensoren (sensor.daytrader_*).
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -13,7 +15,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from .broker.base import Bar, Fill, Position
+from .broker.base import Account, Bar, Fill, Position
 from .homeassistant import Reporter
 from .storage import Storage
 
@@ -25,18 +27,67 @@ NY = ZoneInfo("America/New_York")
 class DayConfig:
     watchlist: list
     start_budget: float = 1100.0
-    max_positions: int = 5
-    position_pct: float = 0.20
+    strategy: str = "pullback"          # pullback (Regelwerk 15 min) | breakout (alt, 5 min)
+    # Pullback-Regelwerk
+    bar_minutes: int = 15
+    risk_per_trade_pct: float = 0.005   # 0,5 % des Kapitals je Trade
+    reward_risk: float = 2.0            # Kursziel = 2R
+    atr_stop_buffer: float = 0.2        # Stop 0,2 x ATR unter dem Pullback-Tief
+    max_chase_atr: float = 0.5          # Einstieg verwerfen, wenn Kurs schon so weit über dem Auslöser ist
+    min_risk_pct: float = 0.002         # Stop-Abstand unter 0,2 % lohnt sich nach Kosten nicht
+    max_trades_per_day: int = 3
+    max_losses_in_row: int = 2
+    max_position_pct: float = 0.34
+    # Ausbruch-Variante
     take_profit_pct: float = 0.015
     stop_loss_pct: float = 0.010
-    breakout_bars: int = 6          # Hoch der letzten 6 Kerzen (30 min) muss überschritten werden
-    min_momentum: float = 0.003     # mindestens +0,3 % in diesen 30 min
-    no_entry_first_min: int = 15    # erste Viertelstunde ist zu wild
+    breakout_bars: int = 6
+    min_momentum: float = 0.003
+    # gemeinsam
+    max_positions: int = 3
+    daily_loss_limit_pct: float = 0.01
+    no_entry_first_min: int = 15
     no_entry_last_min: int = 45
     flat_before_close_min: int = 15
-    daily_loss_limit_pct: float = 0.03
     interval_minutes: int = 2
     min_order_value: float = 10.0
+    earnings_guard_days: int = 1
+
+
+BREAKOUT = {"strategy": "breakout", "bar_minutes": 5, "max_positions": 5, "max_position_pct": 0.20,
+            "daily_loss_limit_pct": 0.03, "max_trades_per_day": 99, "max_losses_in_row": 99}
+
+
+# Indikatoren
+def ema(values: list[float], n: int) -> list[float]:
+    k, out = 2 / (n + 1), []
+    for v in values:
+        out.append(v if not out else out[-1] + k * (v - out[-1]))
+    return out
+
+
+def rsi(closes: list[float], n: int = 14) -> float:
+    if len(closes) <= n:
+        return 50.0
+    gains = losses = 0.0
+    for a, b in zip(closes[:n], closes[1:n + 1]):
+        gains += max(b - a, 0)
+        losses += max(a - b, 0)
+    g, l = gains / n, losses / n
+    for a, b in zip(closes[n:], closes[n + 1:]):
+        g = (g * (n - 1) + max(b - a, 0)) / n
+        l = (l * (n - 1) + max(a - b, 0)) / n
+    return 100.0 if l == 0 else 100 - 100 / (1 + g / l)
+
+
+def atr(bars: list[Bar], n: int = 14) -> float:
+    trs = [max(b.high - b.low, abs(b.high - p.close), abs(b.low - p.close)) for p, b in zip(bars, bars[1:])]
+    if not trs:
+        return 0.0
+    a = sum(trs[:n]) / min(n, len(trs))
+    for t in trs[n:]:
+        a = (a * (n - 1) + t) / n
+    return a
 
 
 def vwap(bars: list[Bar]) -> float:
@@ -46,46 +97,144 @@ def vwap(bars: list[Bar]) -> float:
     return sum((b.high + b.low + b.close) / 3 * b.volume for b in bars) / vol
 
 
-def entry_signal(bars: list[Bar], cfg: DayConfig) -> float | None:
-    """Stärke des Ausbruchs (Kursanstieg der letzten 30 min) oder None, wenn kein Kauf."""
-    n = cfg.breakout_bars
-    if len(bars) < n + 1:
+def session_of(b: Bar) -> date:
+    return b.time.astimezone(NY).date()
+
+
+def aggregate(bars: list[Bar], minutes: int, now: datetime) -> list[Bar]:
+    """5-Minuten-Kerzen zu fertigen 15-Minuten-Kerzen (ab 9:30 New York) zusammenfassen."""
+    if minutes == 5:
+        return bars
+    groups: dict[datetime, list[Bar]] = {}
+    for b in bars:
+        t = b.time.astimezone(NY)
+        since_open = (t.hour * 60 + t.minute) - (9 * 60 + 30)
+        if since_open < 0:
+            continue
+        start = t.replace(second=0, microsecond=0) - timedelta(minutes=since_open % minutes)
+        groups.setdefault(start, []).append(b)
+    out = []
+    for start, bs in sorted(groups.items()):
+        if start + timedelta(minutes=minutes) > now:
+            continue  # Kerze noch nicht abgeschlossen
+        out.append(Bar(start, bs[0].open, max(b.high for b in bs), min(b.low for b in bs), bs[-1].close,
+                       sum(b.volume for b in bs)))
+    return out
+
+
+def bullish_confirmation(c: Bar, prev: Bar) -> bool:
+    rng = c.high - c.low
+    if rng <= 0:
+        return False
+    body = abs(c.close - c.open)
+    strong_green = c.close > c.open and (c.close - c.low) / rng >= 0.7
+    engulfing = prev.close < prev.open and c.close > c.open and c.open <= prev.close and c.close >= prev.open
+    hammer = (min(c.open, c.close) - c.low) >= 2 * max(body, rng * 0.05) and (c.close - c.low) / rng >= 0.66
+    return strong_green or engulfing or hammer
+
+
+def pullback_setup(bars: list[Bar], cfg: DayConfig) -> dict | None:
+    """Long-Setup Trend-Pullback (Regelwerk Abschnitt 2 und 6). bars: fertige Kerzen, mehrere Tage."""
+    if len(bars) < 30:
         return None
-    last = bars[-1].close
-    prior_high = max(b.high for b in bars[-n - 1:-1])
-    momentum = last / bars[-n - 1].close - 1
-    if last > prior_high and last > vwap(bars) and momentum >= cfg.min_momentum:
-        return momentum
+    today = session_of(bars[-1])
+    session = [b for b in bars if session_of(b) == today]
+    if len(session) < 2:
+        return None
+    closes = [b.close for b in bars]
+    e9, e21 = ema(closes, 9), ema(closes, 21)
+    c, prev = bars[-1], bars[-2]
+    v = vwap(session)
+    a = atr(bars[-30:])
+    r = rsi(closes[-60:])
+    if not (c.close > v and e9[-1] > e21[-1] and e9[-1] > e9[-2] and e21[-1] > e21[-2] and 50 <= r <= 70):
+        return None
+    # Seitwärtsmarkt: Kurs kreuzt VWAP ständig oder EMAs liegen ineinander
+    crosses = sum(1 for x, y in zip(session[-8:], session[-7:]) if (x.close - v) * (y.close - v) < 0)
+    if crosses >= 4 or (e9[-1] - e21[-1]) / c.close < 0.0005:
+        return None
+    # Rücklauf zur EMA 9/21 in den letzten Kerzen, ohne Schluss unter EMA 21
+    recent = range(len(bars) - 4, len(bars))
+    if not any(bars[i].low <= e9[i] * 1.001 for i in recent):
+        return None
+    if any(bars[i].close < e21[i] for i in recent):
+        return None
+    if not bullish_confirmation(c, prev):
+        return None
+    vols = [b.volume for b in bars[-21:-1]]
+    if vols and c.volume <= sum(vols) / len(vols):
+        return None
+    trigger = c.high * 1.0005
+    stop = min(b.low for b in bars[-4:]) - cfg.atr_stop_buffer * a
+    risk = trigger - stop
+    if risk <= 0 or risk / trigger < cfg.min_risk_pct:
+        return None
+    target = trigger + cfg.reward_risk * risk
+    # markanter Widerstand direkt darüber (Tageshoch oder Vortageshoch zwischen Einstieg und 1R)
+    highs = [max(b.high for b in session[:-1])] if len(session) > 1 else []
+    prev_day = [b for b in bars if session_of(b) < today]
+    if prev_day:
+        last = session_of(prev_day[-1])
+        highs.append(max(b.high for b in prev_day if session_of(b) == last))
+    if any(trigger < h < trigger + risk for h in highs):
+        return None
+    return {"trigger": trigger, "stop": stop, "target": target, "atr": a, "expires": c.time + 2 * (c.time - prev.time),
+            "why": f"Pullback RSI {r:.0f}, Vol {c.volume / (sum(vols) / len(vols)):.1f}x" if vols else "Pullback"}
+
+
+def breakout_setup(bars: list[Bar], cfg: DayConfig) -> dict | None:
+    """Alte Variante: Ausbruch über das 30-Minuten-Hoch, über VWAP, sofort kaufen."""
+    today = session_of(bars[-1]) if bars else None
+    session = [b for b in bars if session_of(b) == today]
+    n = cfg.breakout_bars
+    if len(session) < n + 1:
+        return None
+    last = session[-1].close
+    momentum = last / session[-n - 1].close - 1
+    if last > max(b.high for b in session[-n - 1:-1]) and last > vwap(session) and momentum >= cfg.min_momentum:
+        return {"trigger": last, "stop": last * (1 - cfg.stop_loss_pct), "target": last * (1 + cfg.take_profit_pct),
+                "atr": 0.0, "expires": session[-1].time + timedelta(minutes=10), "why": f"Ausbruch {momentum:+.1%}"}
     return None
 
 
 class DayTrader:
-    def __init__(self, cfg: DayConfig, broker, storage: Storage, reporter: Reporter | None = None):
+    def __init__(self, cfg: DayConfig, broker, storage: Storage, reporter: Reporter | None = None, earnings=None):
         self.cfg = cfg
         self.broker = broker
         self.storage = storage
         self.reporter = reporter or Reporter()
+        self.earnings = earnings
         self.status = "gestartet"
-        self.traded_today: dict[str, date] = {}
+        self.pending: dict[str, dict] = {}
 
     def capital(self) -> float:
         return self.cfg.start_budget + self.storage.realized_pnl()
 
-    def _realized_today(self, today: date) -> float:
-        rows = self.storage.db.execute("SELECT COALESCE(SUM(pnl),0) FROM trades WHERE time>=?",
-                                       (datetime.combine(today, datetime.min.time(), NY).astimezone(timezone.utc).isoformat(),)
-                                       ).fetchone()
-        return rows[0]
+    def _day(self, today: date) -> dict:
+        return json.loads(self.storage.get(f"day:{today}", '{"entries": 0, "losses_in_row": 0, "pnl": 0.0}'))
 
-    def _sell(self, sym: str, reason: str, meta: dict, now: datetime) -> None:
-        fill = self.broker.sell_all(sym)
-        if not fill:
-            return
+    def _save_day(self, today: date, d: dict) -> None:
+        self.storage.set(f"day:{today}", json.dumps(d))
+
+    def _plan(self, sym: str) -> dict:
+        return json.loads(self.storage.get(f"plan:{sym}", "{}"))
+
+    def _record_exit(self, sym: str, fill: Fill, reason: str, meta: dict, now: datetime) -> None:
         pnl = fill.qty * fill.price - meta.get(sym, 0.0)
         self.storage.record_trade(sym, "sell", fill.qty, fill.price, reason, pnl, when=now)
         self.storage.close_meta(sym)
         meta.pop(sym, None)
+        today = now.astimezone(NY).date()
+        d = self._day(today)
+        d["pnl"] += pnl
+        d["losses_in_row"] = d["losses_in_row"] + 1 if pnl < 0 else 0
+        self._save_day(today, d)
         log.info("VERKAUF %s %.4f @ %.2f | %s | G/V %+.2f", sym, fill.qty, fill.price, reason, pnl)
+
+    def _sell(self, sym: str, reason: str, meta: dict, now: datetime) -> None:
+        fill = self.broker.sell_all(sym)
+        if fill:
+            self._record_exit(sym, fill, reason, meta, now)
 
     def cycle(self, now: datetime | None = None) -> None:
         now = (now or datetime.now(timezone.utc)).astimezone(NY)
@@ -93,58 +242,87 @@ class DayTrader:
         c = self.cfg
         if not self.broker.market_open():
             self.status = "Börse geschlossen"
+            self.pending.clear()
             return
         held = self.broker.positions()
-        meta = {s: v for s, v in self.storage.all_meta().items()}
+        meta = dict(self.storage.all_meta())
         for sym in list(meta):  # beim Broker per Stop verkauft
             if sym not in held:
                 fill = self.broker.last_sell_fill(sym, datetime.fromisoformat(self.storage.get_meta(sym)[2]))
                 if fill:
-                    pnl = fill.qty * fill.price - meta[sym]
-                    self.storage.record_trade(sym, "sell", fill.qty, fill.price, "Stop beim Broker", pnl, when=now)
-                self.storage.close_meta(sym)
-                meta.pop(sym)
+                    self._record_exit(sym, fill, "Stop beim Broker", meta, now)
+                else:
+                    self.storage.close_meta(sym)
+                    meta.pop(sym)
         mins_left = self.broker.minutes_to_close(now)
         if mins_left <= c.flat_before_close_min:
             for sym in list(meta):
                 self._sell(sym, "Handelsschluss", meta, now)
+            self.pending.clear()
             self.status = "Tagesende, alles verkauft"
             return
 
-        bars = self.broker.intraday_bars(c.watchlist, now)
+        # Ausstieg: Stop oder Kursziel
         for sym in list(meta):
-            pos = held.get(sym)
-            if not pos:
+            pos, plan = held.get(sym), self._plan(sym)
+            if not pos or not plan:
                 continue
-            if pos.pnl_pct >= c.take_profit_pct:
-                self._sell(sym, f"Gewinnmitnahme {pos.pnl_pct:+.1%}", meta, now)
-            elif pos.pnl_pct <= -c.stop_loss_pct:
+            if pos.current_price <= plan["stop"]:
                 self._sell(sym, f"Stop-Loss {pos.pnl_pct:+.1%}", meta, now)
+            elif pos.current_price >= plan["target"]:
+                self._sell(sym, f"Kursziel {pos.pnl_pct:+.1%}", meta, now)
 
+        d = self._day(today)
         unrealized = sum(held[s].market_value - meta[s] for s in meta if s in held)
-        if self._realized_today(today) + unrealized <= -c.daily_loss_limit_pct * self.capital():
-            self.status = "Tageslimit erreicht"
+        if d["pnl"] + unrealized <= -c.daily_loss_limit_pct * self.capital():
+            self.status = "Tagesverlustgrenze erreicht"
+            return
+        if d["losses_in_row"] >= c.max_losses_in_row:
+            self.status = f"Pause nach {d['losses_in_row']} Verlusttrades"
+            return
+        if d["entries"] >= c.max_trades_per_day:
+            self.status = "Tageslimit Trades erreicht"
             return
         open_min = (now - now.replace(hour=9, minute=30, second=0, microsecond=0)).total_seconds() / 60
         if open_min < c.no_entry_first_min or mins_left <= c.no_entry_last_min:
             self.status = "handelt (keine neuen Käufe)"
             return
         self.status = "handelt"
-        candidates = []
+
+        raw = self.broker.intraday_bars(c.watchlist, now, days=0 if c.strategy == "breakout" else 6)
+        soon = {}
+        if self.earnings and c.strategy == "pullback":
+            soon = self.earnings.upcoming(c.watchlist, today, c.earnings_guard_days)
+        setup = breakout_setup if c.strategy == "breakout" else pullback_setup
         for sym in c.watchlist:
-            if sym in meta or self.traded_today.get(sym) == today:
+            bars5 = raw.get(sym, [])
+            if not bars5 or sym in meta or sym in soon:
                 continue
-            strength = entry_signal(bars.get(sym, []), c)
-            if strength is not None:
-                candidates.append((strength, sym))
+            plan = setup(aggregate(bars5, c.bar_minutes, now), c)
+            if plan and (sym not in self.pending or self.pending[sym]["trigger"] != plan["trigger"]):
+                self.pending[sym] = plan
+
         cash = self.broker.account().cash
-        for strength, sym in sorted(candidates, reverse=True):
-            if len(meta) >= c.max_positions:
+        for sym, plan in sorted(self.pending.items(), key=lambda kv: kv[1]["trigger"]):
+            if now >= plan["expires"] or sym in meta:
+                self.pending.pop(sym, None)
+                continue
+            price = raw.get(sym, [None])[-1].close if raw.get(sym) else None
+            if price is None or price < plan["trigger"]:
+                continue
+            self.pending.pop(sym, None)
+            if price > plan["trigger"] + c.max_chase_atr * plan["atr"] or price <= plan["stop"]:
+                continue  # Kurs weggelaufen: nicht hinterherkaufen
+            if len(meta) >= c.max_positions or d["entries"] >= c.max_trades_per_day:
                 break
-            free = min(self.capital() - sum(meta.values()), cash)
-            amount = min(self.capital() * c.position_pct, free)
+            risk_share = price - plan["stop"]
+            if c.strategy == "breakout":
+                amount = self.capital() * c.max_position_pct
+            else:
+                amount = self.capital() * c.risk_per_trade_pct / risk_share * price
+            amount = min(amount, self.capital() * c.max_position_pct, self.capital() - sum(meta.values()), cash)
             if amount < c.min_order_value:
-                break
+                continue
             fill = self.broker.buy_notional(sym, amount)
             if not fill:
                 continue
@@ -152,10 +330,13 @@ class DayTrader:
             cash -= cost
             self.storage.open_meta(sym, cost, fill.price, when=now)
             meta[sym] = cost
-            self.traded_today[sym] = today
-            self.storage.record_trade(sym, "buy", fill.qty, fill.price, f"Ausbruch {strength:+.1%} in 30 min", when=now)
-            self.broker.ensure_stop(sym, fill.qty, fill.price * (1 - c.stop_loss_pct))
-            log.info("KAUF %s %.4f @ %.2f (%.2f) | Ausbruch %+.1f%%", sym, fill.qty, fill.price, cost, strength * 100)
+            self.storage.set(f"plan:{sym}", json.dumps({"stop": plan["stop"], "target": plan["target"]}))
+            d["entries"] += 1
+            self._save_day(today, d)
+            reason = f"{plan['why']}, Stop {plan['stop']:.2f}, Ziel {plan['target']:.2f}"
+            self.storage.record_trade(sym, "buy", fill.qty, fill.price, reason, when=now)
+            self.broker.ensure_stop(sym, fill.qty, plan["stop"])
+            log.info("KAUF %s %.4f @ %.2f (%.2f) | %s", sym, fill.qty, fill.price, cost, reason)
 
     def publish(self) -> None:
         try:
@@ -176,7 +357,8 @@ class DayTrader:
             log.exception("Daytrader-Status konnte nicht gemeldet werden")
 
     def run_forever(self) -> None:
-        log.info("Daytrader gestartet, Startbudget %.2f $, Intervall %d min", self.cfg.start_budget, self.cfg.interval_minutes)
+        log.info("Daytrader gestartet (%s), Startbudget %.2f $, Intervall %d min",
+                 self.cfg.strategy, self.cfg.start_budget, self.cfg.interval_minutes)
         while True:
             try:
                 self.cycle()
@@ -206,8 +388,7 @@ class IntradaySim:
             self.idx[s] = i
 
     def _price(self, sym: str) -> float:
-        i = self.idx[sym]
-        return self.bars[sym][i - 1].close
+        return self.bars[sym][self.idx[sym] - 1].close
 
     def market_open(self) -> bool:
         return True
@@ -216,19 +397,15 @@ class IntradaySim:
         n = now.astimezone(NY)
         return (n.replace(hour=16, minute=0, second=0, microsecond=0) - n).total_seconds() / 60
 
-    def intraday_bars(self, symbols, now) -> dict[str, list[Bar]]:
-        day = now.astimezone(NY).date()
-        out = {}
-        for s in symbols:
-            bs = self.bars.get(s, [])[: self.idx.get(s, 0)]
-            out[s] = [b for b in bs if b.time.astimezone(NY).date() == day]
-        return out
+    def intraday_bars(self, symbols, now, days: int = 0) -> dict[str, list[Bar]]:
+        first = now.astimezone(NY).date() - timedelta(days=days)
+        return {s: [b for b in self.bars.get(s, [])[: self.idx.get(s, 0)] if session_of(b) >= first]
+                for s in symbols}
 
     def positions(self) -> dict[str, Position]:
         return {s: Position(s, q, p, self._price(s)) for s, (q, p) in self.holdings.items()}
 
-    def account(self):
-        from .broker.base import Account
+    def account(self) -> Account:
         eq = self.cash + sum(p.market_value for p in self.positions().values())
         return Account(self.cash, eq, self.cash)
 
@@ -256,12 +433,17 @@ class IntradaySim:
         return None
 
 
-def backtest(cfg: DayConfig, bars: dict[str, list[Bar]]) -> dict:
-    """Daytrading-Regeln über historische 5-Minuten-Kerzen, alle 5 min ein Zyklus."""
+def backtest(cfg: DayConfig, bars: dict[str, list[Bar]], test_days: int | None = None) -> dict:
+    """Regeln über historische 5-Minuten-Kerzen, alle 5 min ein Zyklus. Die ersten Tage dienen nur
+    zum Einlaufen der Indikatoren, wenn test_days gesetzt ist."""
     sim = IntradaySim(bars, cfg.start_budget)
     bot = DayTrader(cfg, sim, Storage(":memory:"))
     times = sorted({b.time + timedelta(minutes=5) for bs in bars.values() for b in bs
                     if (9, 30) <= (b.time.astimezone(NY).hour, b.time.astimezone(NY).minute) < (16, 0)})
+    all_days = sorted({t.astimezone(NY).date() for t in times})
+    if test_days:
+        start = all_days[-test_days] if len(all_days) >= test_days else all_days[0]
+        times = [t for t in times if t.astimezone(NY).date() >= start]
     days = set()
     level = log.level
     log.setLevel(logging.WARNING)  # Backtest-Trades nicht ins Protokoll, sonst sehen sie echt aus
@@ -272,11 +454,17 @@ def backtest(cfg: DayConfig, bars: dict[str, list[Bar]]) -> dict:
             bot.cycle(t)
     finally:
         log.setLevel(level)
-    trades = bot.storage.db.execute("SELECT pnl FROM trades WHERE side='sell'").fetchall()
-    wins = sum(1 for (p,) in trades if p > 0)
-    return {"start": cfg.start_budget, "end": bot.capital(), "days": len(days), "trades": len(trades),
-            "win_rate": wins / len(trades) if trades else 0.0}
+    sells = [p for (p,) in bot.storage.db.execute("SELECT pnl FROM trades WHERE side='sell'").fetchall()]
+    wins = [p for p in sells if p > 0]
+    losses = [p for p in sells if p <= 0]
+    return {"start": cfg.start_budget, "end": bot.capital(), "days": len(days), "trades": len(sells),
+            "win_rate": len(wins) / len(sells) if sells else 0.0,
+            "avg_win": sum(wins) / len(wins) if wins else 0.0,
+            "avg_loss": sum(losses) / len(losses) if losses else 0.0}
 
 
-def config_from_env(watchlist: list) -> DayConfig:
-    return DayConfig(watchlist=watchlist, start_budget=float(os.getenv("DAYTRADER_BUDGET") or 1100))
+def config_from_env(watchlist: list, **overrides) -> DayConfig:
+    cfg = DayConfig(watchlist=watchlist, start_budget=float(os.getenv("DAYTRADER_BUDGET") or 1100))
+    for k, v in overrides.items():
+        setattr(cfg, k, v)
+    return cfg

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0
+- Daytrader handelt nach dem Regelwerk „Trend-Pullback“ (15-Minuten-Kerzen): Kurs über VWAP, EMA 9 über EMA 21 und beide steigend, RSI 50–70, Rücklauf zur EMA, bullische Bestätigungskerze mit überdurchschnittlichem Volumen. Einstieg über dem Hoch der Bestätigungskerze, Stop 0,2 ATR unter dem Pullback-Tief, Ziel 2R, Risiko 0,5 % je Trade. Höchstens 3 Trades am Tag, Pause nach 2 Verlusten in Folge, Tagesverlustgrenze 1 %. Keine Trades im Seitwärtsmarkt, vor Quartalszahlen oder unter einem nahen Widerstand. Nur Long.
+- Beim Start Backtest über 20 Handelstage: Regelwerk und alte Ausbruch-Variante im Vergleich.
+
 ## 0.6.1
 - Daytrader-Backtest schreibt seine simulierten Käufe und Verkäufe nicht mehr ins Protokoll.
 

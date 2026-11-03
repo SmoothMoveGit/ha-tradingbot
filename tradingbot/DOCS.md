@@ -70,12 +70,17 @@ Sind alle Positionsplätze belegt, wird neues Geld (monatlich oder Sonderzahlung
 
 ## Daytrader (Vergleich)
 
-Trägst du die Schlüssel eines zweiten Alpaca-Paper-Kontos ein, läuft zusätzlich ein Daytrading-Bot. Er handelt nur mit Spielgeld, auch wenn der Hauptbot auf live steht.
+Trägst du die Schlüssel eines zweiten Alpaca-Paper-Kontos ein, läuft zusätzlich ein Daytrading-Bot. Er handelt nur mit Spielgeld, auch wenn der Hauptbot auf live steht. Regelwerk „Trend-Pullback“ auf 15-Minuten-Kerzen, nur Long:
 
-- Alle 2 Minuten: Kauf, wenn eine Aktie über das Hoch der letzten 30 Minuten steigt (mindestens +0,3 %) und über ihrem Tagesdurchschnittspreis (VWAP) liegt.
-- Bis zu 5 Aktien à 20 %, jede Aktie höchstens einmal am Tag.
-- Verkauf bei +1,5 % Gewinn oder -1 % Verlust, 15 Minuten vor Handelsschluss wird alles verkauft.
-- Keine Käufe in der ersten Viertelstunde und in der letzten Dreiviertelstunde, Tageslimit -3 %.
+- Kurs über der Session-VWAP, EMA 9 über EMA 21 und beide steigend, RSI(14) zwischen 50 und 70.
+- Rücklauf zur EMA 9/21 in den letzten Kerzen, ohne Schluss unter der EMA 21.
+- Bullische Bestätigungskerze (kräftig grün, Hammer oder Engulfing) mit mehr Volumen als der Schnitt der letzten 20 Kerzen.
+- Einstieg, sobald der Kurs das Hoch der Bestätigungskerze übersteigt (innerhalb der nächsten Kerze, nicht hinterherkaufen). Stop 0,2 × ATR unter dem Pullback-Tief, Kursziel 2 × Risiko.
+- Positionsgröße: 0,5 % Risiko des Kapitals je Trade, höchstens ein Drittel des Kapitals je Aktie.
+- Höchstens 3 Trades am Tag, nach 2 Verlusten in Folge Pause, Tagesverlustgrenze 1 %, 15 Minuten vor Schluss wird alles verkauft.
+- Kein Trade im Seitwärtsmarkt (VWAP ständig gekreuzt, EMAs ineinander), am Tag vor Quartalszahlen, bei zu kleinem Stop-Abstand (unter 0,2 %) oder wenn das Tageshoch bzw. Vortageshoch direkt darüber liegt.
+
+Beim Start rechnet er einen Backtest über die letzten 20 Handelstage und vergleicht mit der alten Ausbruch-Variante.
 
 Hinweis: Echtes Daytrading ist in den USA bei Konten unter 25.000 $ auf 3 Tagestrades in 5 Tagen begrenzt. Das Paper-Konto hat 100.000 $ Spielgeld, deshalb greift die Regel im Test nicht.
 
