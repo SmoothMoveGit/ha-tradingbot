@@ -98,20 +98,19 @@ def daytrade(cfg) -> int:
     from .daytrader import BREAKOUT, EXTRA_SYMBOLS, LOOSE, DayTrader, backtest as day_backtest, config_from_env
     from .earnings import EarningsCalendar
     from .homeassistant import HomeAssistantReporter
-    dcfg = config_from_env(cfg.watchlist)
+    # Seit 0.7.4: gelockertes Regelwerk auf 25 Aktien (bester Wert im 40-Tage-Vergleich, Michi hat Anpassungen freigegeben)
+    wide = list(dict.fromkeys(cfg.watchlist + EXTRA_SYMBOLS))
+    dcfg = config_from_env(wide, **LOOSE)
     broker = AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)  # Daytrader nie mit echtem Geld
     log = logging.getLogger("tradingbot.daytrader")
     def compare() -> None:
         try:
-            wide = list(dict.fromkeys(dcfg.watchlist + EXTRA_SYMBOLS))
             bars = broker.intraday_bars(wide, days=70)
             variants = [
-                ("Regelwerk (aktuell)", {}),
-                ("locker", LOOSE),
-                ("locker ohne Widerstand", {**LOOSE, "resistance_filter": False}),
-                ("locker 5-min-Kerzen", {**LOOSE, "bar_minutes": 5}),
+                ("locker 25 Aktien (aktiv)", {**LOOSE, "watchlist": wide}),
                 ("Regelwerk 25 Aktien", {"watchlist": wide}),
-                ("locker 25 Aktien", {**LOOSE, "watchlist": wide}),
+                ("Regelwerk original 10 Aktien", {}),
+                ("locker 10 Aktien", LOOSE),
                 ("Ausbruch (alt)", BREAKOUT),
             ]
             for name, over in variants:

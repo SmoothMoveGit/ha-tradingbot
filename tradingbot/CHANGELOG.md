@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.4
+- Daytrader handelt jetzt mit dem gelockerten Regelwerk auf 25 statt 10 Aktien (RSI 45–75, EMA-Abstand 0,02 %, bis 5 VWAP-Kreuzungen, Rücklauf bis 0,3 % an die EMA 9, Volumen über 80 % des Schnitts, Einstieg 2 Kerzen gültig). Im 40-Tage-Backtest: +1,0 % bei 72 Trades, Original-Regelwerk −0,5 % bei 12 Trades.
+- Varianten-Backtest beim Start auf fünf Varianten gekürzt.
+
 ## 0.7.3
 - Varianten-Backtest: Fehler bei den Varianten mit 25 Aktien behoben, zusätzlich wird gezählt, wie Trades enden (Kursziel, Stop, Handelsschluss).
 
