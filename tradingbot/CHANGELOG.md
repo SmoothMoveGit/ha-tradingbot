@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.1
+- Doppelte Meldungen (gleiche Überschrift aus mehreren Quellen) und allgemeine Meldungen ohne Wirtschaftsbezug (z.B. Sport) gehen nicht mehr an Claude. Spart Kosten und macht die Bewertung sauberer.
+
 ## 0.5.0
 - Claude bewertet jede Nachricht für alle Aktien der Watchlist, auch indirekt: Probleme bei Zulieferern, Kunden oder Konkurrenten wirken auf die eigene Aktie (meist schwächer).
 - Nachrichten von Partnerfirmen werden mitgeholt (z.B. TSMC für Apple und Nvidia). Liste unter `related` in `config.yaml`, sonst eingebaute Standardliste.

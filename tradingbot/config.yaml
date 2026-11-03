@@ -1,5 +1,5 @@
 name: Tradingbot
-version: "0.5.0"
+version: "0.5.1"
 slug: tradingbot
 description: Autonomer Aktien-Tradingbot mit Nachrichtenanalyse (startet im Paper-Modus)
 url: https://github.com/SmoothMoveGit/ha-tradingbot

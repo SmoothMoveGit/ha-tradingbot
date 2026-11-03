@@ -4,11 +4,13 @@ from __future__ import annotations
 import calendar
 import hashlib
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 
 from .sentiment import SentimentEngine
 
 log = logging.getLogger(__name__)
+WORDS = re.compile(r"[a-zäöüß0-9]+")
 MARKET = "_MARKET"  # Pseudo-Symbol für allgemeine Welt- und Marktnachrichten
 
 
@@ -45,6 +47,32 @@ def fetch_rss(feeds: list[str], since: datetime) -> list[dict]:
     return items
 
 
+# Wörter, an denen man Wirtschafts- und Weltlage-Meldungen erkennt (für allgemeine RSS-Feeds)
+MARKET_WORDS = {
+    "market", "markets", "stock", "stocks", "shares", "economy", "economic", "fed", "rate", "rates",
+    "inflation", "recession", "tariff", "tariffs", "trade", "sanctions", "war", "oil", "bank", "banks",
+    "earnings", "gdp", "jobs", "unemployment", "dollar", "bond", "bonds", "treasury", "crisis", "chip",
+    "chips", "ai", "regulation", "antitrust", "strike", "supply", "china", "election", "default",
+    "börse", "aktien", "wirtschaft", "konjunktur", "zinsen", "zins", "inflation", "zölle", "krieg",
+    "rezession", "ezb", "dax", "ölpreis", "handel", "export", "insolvenz", "arbeitsmarkt",
+}
+
+
+def _norm_headline(text: str) -> str:
+    return " ".join(WORDS.findall(text.lower()))[:120]
+
+
+def is_relevant(item: dict, watchlist: list[str], aliases: dict[str, list[str]], related: dict[str, list[str]]) -> bool:
+    """Lohnt sich die Bewertung? Firmenmeldungen immer, allgemeine Meldungen nur mit Wirtschaftsbezug."""
+    if item.get("symbols"):
+        return True
+    if tag_symbols(item, watchlist, aliases) != [MARKET]:
+        return True
+    words = set(WORDS.findall(f"{item['headline']} {item.get('summary', '')}".lower()))
+    partners = {p.lower() for s in watchlist for p in related.get(s, [])}
+    return bool(words & (MARKET_WORDS | partners))
+
+
 def related_symbols(item: dict, watchlist: list[str], related: dict[str, list[str]]) -> list[str]:
     """Watchlist-Aktien, deren Partnerfirma (Zulieferer, Kunde, Konkurrent) in der Nachricht vorkommt."""
     tagged = set(item.get("symbols", []))
@@ -79,7 +107,14 @@ class NewsAnalyzer:
             partners = sorted({p for s in wl for p in related.get(s, [])} - set(wl))
             items += self.broker.fetch_news(wl + partners, since, self.cfg.news.max_alpaca_news)
         items += fetch_rss(self.cfg.news.rss_feeds, since)
-        new = list({i["id"]: i for i in items if not self.storage.has_news(i["id"])}.values())
+        new, seen = [], set()
+        for i in items:  # gleiche Meldung aus mehreren Quellen nur einmal, Unwichtiges gar nicht bewerten
+            key = _norm_headline(i["headline"])
+            if i["id"] in seen or key in seen or self.storage.has_news(i["id"]):
+                continue
+            seen.update((i["id"], key))
+            if is_relevant(i, wl, self.cfg.aliases, related):
+                new.append(i)
         texts = [f"{i['headline']}. {i['summary']}" for i in new]
         companies = {s: (self.cfg.aliases.get(s) or [s])[0] for s in wl}
         impacts = self.engine.impacts_many(texts, companies, related, MARKET)

@@ -368,3 +368,21 @@ def test_earnings_calendar_caches_and_survives_errors():
     def broken(d):
         raise OSError("kein Netz")
     assert EarningsCalendar(Storage(":memory:"), broken).upcoming(["AAPL"], date(2026, 11, 3), 2) == {}
+
+
+def test_irrelevant_and_duplicate_news_are_skipped():
+    from tradingbot.news import is_relevant
+    wl, al, rel = ["AAPL"], {"AAPL": ["Apple"]}, {"AAPL": ["TSM"]}
+    news = lambda h, syms=(): {"id": h, "headline": h, "summary": "", "symbols": list(syms)}
+    assert not is_relevant(news("Football: Arsenal win derby"), wl, al, rel)
+    assert is_relevant(news("Fed raises rates again"), wl, al, rel)
+    assert is_relevant(news("Apple unveils new iPhone"), wl, al, rel)
+    assert is_relevant(news("Quiet day", ["TSM"]), wl, al, rel)
+    bot, _ = make_bot(symbols=("AAPL",))
+    bot.cfg.news.use_alpaca_news = True
+    t = datetime.now(timezone.utc)
+    items = [dict(news("Apple shares surge", ["AAPL"]), id="a", time=t),
+             dict(news("Apple shares surge!", ["AAPL"]), id="b", time=t),
+             dict(news("Arsenal win derby"), id="c", time=t)]
+    bot.broker.fetch_news = lambda syms, since, limit=500: items
+    assert bot.news.refresh() == 1
