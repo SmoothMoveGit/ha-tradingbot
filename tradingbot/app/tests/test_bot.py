@@ -128,6 +128,30 @@ def test_reports_status_and_trades():
     s = bot.reporter.published[-1]
     assert s["positions"] == ["AAA"] and s["status"] == "handelt" and not s["halted"]
     assert any("gekauft" in n for n in bot.reporter.notes)
+    assert s["positions_detail"][0]["symbol"] == "AAA" and s["trade_count"] == 1
+    assert s["trades"][0]["art"] == "Kauf" and "AAA" in s["signals"]
+    assert s["cash"] == pytest.approx(s["capital"] - s["invested"])
+
+
+def test_homeassistant_reporter_dashboard_sensors(monkeypatch):
+    import json
+    from tradingbot import homeassistant as ha
+    bot, _ = make_bot()
+    bot.reporter = FakeReporter()
+    bot.run_cycle()
+    calls = []
+
+    class Resp:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(ha.urllib.request, "urlopen", lambda req, timeout: calls.append(req) or Resp())
+    ha.HomeAssistantReporter("http://x/api", "tok").publish(bot.reporter.published[-1])
+    states = {c.full_url.rsplit("/", 1)[-1]: json.loads(c.data) for c in calls}
+    for e in ("unrealisiert", "bargeld", "rendite", "heute", "drawdown", "marktstimmung", "trades"):
+        assert f"sensor.tradingbot_{e}" in states
+    assert states["sensor.tradingbot_positionen"]["attributes"]["details"][0]["symbol"] == "AAA"
+    assert len(json.dumps(states["sensor.tradingbot_marktstimmung"])) < 16000
 
 
 def test_env_overrides(monkeypatch):

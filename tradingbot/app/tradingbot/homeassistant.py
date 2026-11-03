@@ -58,11 +58,40 @@ class HomeAssistantReporter(Reporter):
                         friendly_name=f"Tradingbot Vergleich {s.get('benchmark') or 'ETF'}", icon="mdi:scale-balance",
                         vorsprung=round(s["value"] - s["benchmark_value"], 2), **money)
         self._state("sensor.tradingbot_positionen", len(s["positions"]), friendly_name="Tradingbot Positionen",
-                    icon="mdi:briefcase", aktien=s["positions"])
+                    icon="mdi:briefcase", aktien=s["positions"], details=s.get("positions_detail", []),
+                    max_positionen=s.get("max_positions"))
         self._state("sensor.tradingbot_status", s["status"], friendly_name="Tradingbot Status",
-                    icon="mdi:robot", modus=s["mode"], letzter_trade=s.get("last_trade"))
+                    icon="mdi:robot", modus=s["mode"], letzter_trade=s.get("last_trade"),
+                    strategie=s.get("strategy"), watchlist=s.get("watchlist"),
+                    intervall_minuten=s.get("interval_minutes"), letzter_lauf=s.get("last_run"))
         self._state("binary_sensor.tradingbot_not_aus", "on" if s["halted"] else "off",
                     friendly_name="Tradingbot Not-Aus", device_class="problem")
+        if "positions_detail" in s:
+            self._publish_details(s, money)
+
+    def _publish_details(self, s: dict, money: dict) -> None:
+        pct = {"unit_of_measurement": "%", "state_class": "measurement"}
+        self._state("sensor.tradingbot_unrealisiert", round(s["unrealized_pnl"], 2),
+                    friendly_name="Tradingbot offener Gewinn", icon="mdi:chart-areaspline", **money)
+        self._state("sensor.tradingbot_bargeld", round(s["cash"], 2), friendly_name="Tradingbot Bargeld",
+                    icon="mdi:wallet", investiert=round(s["invested"], 2), **money)
+        paid = s["paid_in"]
+        self._state("sensor.tradingbot_rendite", round((s["value"] / paid - 1) * 100, 2) if paid else 0.0,
+                    friendly_name="Tradingbot Rendite", icon="mdi:percent", eingezahlt=round(paid, 2), **pct)
+        self._state("sensor.tradingbot_heute", round(s["day_change_pct"], 2), friendly_name="Tradingbot heute",
+                    icon="mdi:calendar-today", tageslimit_prozent=s["daily_loss_limit_pct"], **pct)
+        self._state("sensor.tradingbot_drawdown", round(s["drawdown_pct"], 2),
+                    friendly_name="Tradingbot Abstand zum Höchststand", icon="mdi:trending-down",
+                    hoechststand=round(s["peak_value"], 2), not_aus_bei_prozent=s["max_drawdown_pct"],
+                    stop_loss_prozent=s["stop_loss_pct"], trailing_stop_prozent=s["trailing_stop_pct"],
+                    gewinnmitnahme_prozent=s["take_profit_pct"], **pct)
+        m = s["market_sentiment"]
+        self._state("sensor.tradingbot_marktstimmung", round(m, 2), friendly_name="Tradingbot Marktstimmung",
+                    icon="mdi:earth", state_class="measurement",
+                    bewertung="positiv" if m > 0.15 else "negativ" if m < -0.15 else "neutral",
+                    aktien=s["news_scores"], signale=s["signals"], schlagzeilen=s["news"])
+        self._state("sensor.tradingbot_trades", s["trade_count"], friendly_name="Tradingbot Trades",
+                    icon="mdi:swap-horizontal", state_class="total", letzte=s["trades"])
 
     def notify(self, title: str, message: str) -> None:
         if self.notify_service:

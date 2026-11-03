@@ -24,6 +24,15 @@ Der Bot meldet diese Entitäten (nach jedem Zyklus aktualisiert):
 | `sensor.tradingbot_status` | handelt / Börse geschlossen / Tageslimit erreicht / Not-Aus |
 | `binary_sensor.tradingbot_not_aus` | an, wenn der Not-Aus ausgelöst hat |
 | `sensor.tradingbot_vergleich_etf` | Wert von Startbudget und Einzahlungen, hätte man sie in einen MSCI-World-ETF (URTH) gesteckt; Attribut `vorsprung` = Bot minus ETF |
+| `sensor.tradingbot_unrealisiert` | offener (noch nicht realisierter) Gewinn/Verlust der Positionen |
+| `sensor.tradingbot_bargeld` | freies Geld des Bots; Attribut `investiert` |
+| `sensor.tradingbot_rendite` | Rendite in % bezogen auf Startbudget + Einzahlungen |
+| `sensor.tradingbot_heute` | Wertänderung seit Handelsbeginn heute in % |
+| `sensor.tradingbot_drawdown` | Abstand zum bisherigen Höchststand in %; Attribute mit Not-Aus-Grenze und Stop-Werten |
+| `sensor.tradingbot_marktstimmung` | Nachrichtenlage −1 bis +1; Attribute `aktien`, `signale`, `schlagzeilen` |
+| `sensor.tradingbot_trades` | Anzahl Trades; Attribut `letzte` (die letzten 10) |
+
+Das fertige Dashboard „Aktien“ liegt in [`dashboard/aktien.yaml`](../dashboard/aktien.yaml).
 
 Käufe, Verkäufe und Not-Aus kommen als Benachrichtigung (Option *Benachrichtigungsdienst*, z.B. `notify.mobile_app_dein_handy`).
 

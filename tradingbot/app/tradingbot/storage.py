@@ -68,6 +68,9 @@ class Storage:
             "SELECT time, symbol, side, qty, price, pnl, reason FROM trades ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
 
+    def trade_count(self) -> int:
+        return self.db.execute("SELECT COUNT(*) FROM trades").fetchone()[0]
+
     def open_meta(self, symbol: str, cost: float, price: float) -> None:
         row = self.get_meta(symbol)
         if row:
