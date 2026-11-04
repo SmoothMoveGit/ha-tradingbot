@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.5
+- Hauptbot, Sensor *heute*: Bezug ist jetzt der Schlusswert des letzten Handelstags statt des Werts beim ersten Lauf des Tages (Kurssprünge über Nacht fehlten). Gilt auch für das Tagesverlust-Limit. Einzahlungen zählen nicht als Tagesgewinn.
+
 ## 0.7.4
 - Daytrader handelt jetzt mit dem gelockerten Regelwerk auf 25 statt 10 Aktien (RSI 45–75, EMA-Abstand 0,02 %, bis 5 VWAP-Kreuzungen, Rücklauf bis 0,3 % an die EMA 9, Volumen über 80 % des Schnitts, Einstieg 2 Kerzen gültig). Im 40-Tage-Backtest: +1,0 % bei 72 Trades, Original-Regelwerk −0,5 % bei 12 Trades.
 - Varianten-Backtest beim Start auf fünf Varianten gekürzt.

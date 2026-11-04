@@ -91,6 +91,16 @@ def test_daily_loss_and_drawdown_limits():
     assert risk.halted
 
 
+def test_day_change_starts_from_last_close():
+    cfg = Config()
+    risk = RiskManager(cfg, Storage(":memory:"))
+    d = date(2026, 11, 3)
+    risk.check_limits(1100, d)
+    risk.remember_close(1090)  # Schluss gestern
+    risk.check_limits(1104, d + timedelta(days=1))
+    assert float(risk.storage.get("day_start_value")) == 1090
+
+
 def test_live_mode_requires_confirmation(tmp_path, monkeypatch):
     monkeypatch.delenv("CONFIRM_LIVE_TRADING", raising=False)
     f = tmp_path / "c.yaml"

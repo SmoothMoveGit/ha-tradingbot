@@ -62,8 +62,13 @@ class RiskManager:
         """Gibt 'day' (heute keine Käufe), 'stop' (alles verkaufen, Bot anhalten) oder None zurück."""
         today = (today or date.today()).isoformat()
         if self.storage.get("day") != today:
+            # Bezug ist der Schlusswert des letzten Handelstags (wie bei Börsenkursen), Einzahlungen
+            # seitdem zählen nicht als Gewinn. Ohne Vortag: aktueller Wert.
+            last = self.storage.get("last_value")
+            start = bot_value if last is None else \
+                float(last) + self.bot_capital() - float(self.storage.get("last_capital", self.bot_capital()))
             self.storage.set("day", today)
-            self.storage.set("day_start_value", bot_value)
+            self.storage.set("day_start_value", start)
         day_start = float(self.storage.get("day_start_value", bot_value))
         peak = max(float(self.storage.get("peak_value", bot_value)), bot_value)
         self.storage.set("peak_value", peak)
@@ -73,6 +78,11 @@ class RiskManager:
         if bot_value < day_start * (1 - self.r.daily_loss_limit_pct):
             return "day"
         return None
+
+    def remember_close(self, bot_value: float) -> None:
+        """Nach jedem Handelszyklus: letzter Wert als Bezug für den nächsten Tag."""
+        self.storage.set("last_value", bot_value)
+        self.storage.set("last_capital", self.bot_capital())
 
     @property
     def halted(self) -> bool:

@@ -331,6 +331,7 @@ class TradingBot:
         positions, meta = self._own_positions()
         value = self.risk.bot_capital() - sum(meta.values()) + sum(p.market_value for p in positions.values())
         self.storage.record_equity(value, self.risk.bot_capital(), self.broker.account().equity)
+        self.risk.remember_close(value)
         log.info("Bot-Wert %.2f | Kapital %.2f | Positionen: %s", value, self.risk.bot_capital(), ", ".join(meta) or "keine")
 
     def run_forever(self) -> None:
