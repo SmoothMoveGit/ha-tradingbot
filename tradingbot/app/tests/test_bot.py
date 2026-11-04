@@ -99,6 +99,12 @@ def test_day_change_starts_from_last_close():
     risk.remember_close(1090)  # Schluss gestern
     risk.check_limits(1104, d + timedelta(days=1))
     assert float(risk.storage.get("day_start_value")) == 1090
+    st = Storage(":memory:")
+    st.record_equity(1131.65, 1096.73, 100000)  # nur Verlauf, kein gemerkter Schluss
+    r2 = RiskManager(cfg, st)
+    cfg.risk.start_budget = 1096.73
+    r2.check_limits(1140, d)
+    assert float(st.get("day_start_value")) == pytest.approx(1131.65)
 
 
 def test_live_mode_requires_confirmation(tmp_path, monkeypatch):

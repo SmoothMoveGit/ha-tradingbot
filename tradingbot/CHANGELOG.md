@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.6
+- Tagesänderung: Fehlt der gemerkte Schlusswert (Update am Abend), wird der letzte Eintrag im Verlauf genommen.
+
 ## 0.7.5
 - Hauptbot, Sensor *heute*: Bezug ist jetzt der Schlusswert des letzten Handelstags statt des Werts beim ersten Lauf des Tages (Kurssprünge über Nacht fehlten). Gilt auch für das Tagesverlust-Limit. Einzahlungen zählen nicht als Tagesgewinn.
 

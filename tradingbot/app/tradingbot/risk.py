@@ -64,9 +64,14 @@ class RiskManager:
         if self.storage.get("day") != today:
             # Bezug ist der Schlusswert des letzten Handelstags (wie bei Börsenkursen), Einzahlungen
             # seitdem zählen nicht als Gewinn. Ohne Vortag: aktueller Wert.
-            last = self.storage.get("last_value")
+            last, last_cap = self.storage.get("last_value"), self.storage.get("last_capital")
+            if last is None:  # ältere Versionen: letzter Eintrag im Verlauf
+                row = self.storage.db.execute(
+                    "SELECT bot_value, bot_capital FROM equity ORDER BY time DESC LIMIT 1").fetchone()
+                if row:
+                    last, last_cap = row
             start = bot_value if last is None else \
-                float(last) + self.bot_capital() - float(self.storage.get("last_capital", self.bot_capital()))
+                float(last) + self.bot_capital() - float(last_cap if last_cap is not None else self.bot_capital())
             self.storage.set("day", today)
             self.storage.set("day_start_value", start)
         day_start = float(self.storage.get("day_start_value", bot_value))
