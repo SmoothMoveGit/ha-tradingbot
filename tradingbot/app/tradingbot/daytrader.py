@@ -49,6 +49,7 @@ class DayConfig:
     vol_factor: float = 1.0             # Volumen der Signalkerze > Faktor x Schnitt der letzten 20
     resistance_filter: bool = True
     entry_valid_bars: int = 1           # so viele Kerzen bleibt der Einstieg gültig
+    breakeven_r: float = 0.0            # >0: Stop auf Einstand, sobald der Kurs so viele R im Plus ist
     # Ausbruch-Variante
     take_profit_pct: float = 0.015
     stop_loss_pct: float = 0.010
@@ -68,6 +69,10 @@ class DayConfig:
 # Zusätzliche, sehr liquide US-Werte: mehr Kandidaten heißt mehr Signale, ohne die Regeln aufzuweichen
 EXTRA_SYMBOLS = ["AMD", "AVGO", "TSLA", "NFLX", "ORCL", "CRM", "COST", "WMT", "XOM", "UNH",
                  "MA", "HD", "PG", "LLY", "BAC"]
+
+# Noch mehr Kandidaten (große, liquide Werte und Index-ETFs)
+MORE_SYMBOLS = ["QQQ", "SPY", "IWM", "SMH", "XLF", "PLTR", "UBER", "MU", "QCOM", "ADBE",
+                "INTC", "PYPL", "PEP", "CSCO", "DIS"]
 
 # Gelockerte Fassung des Regelwerks (Michi hat Anpassungen freigegeben, 2026-11-03)
 LOOSE = {"rsi_min": 45.0, "rsi_max": 75.0, "min_ema_gap": 0.0002, "max_vwap_crosses": 6,
@@ -239,6 +244,7 @@ class DayTrader:
         self.log = log
         self.stats: dict | None = None  # im Backtest: Gründe, warum kein Setup entstand
         self._seen: dict[str, datetime] = {}
+        self.live_stats: dict = {}  # live: warum heute kein Setup entstand, Ausgabe zum Tagesende
 
     def capital(self) -> float:
         return self.cfg.start_budget + self.storage.realized_pnl()
@@ -289,6 +295,10 @@ class DayTrader:
                     meta.pop(sym)
         mins_left = self.broker.minutes_to_close(now)
         if mins_left <= c.flat_before_close_min:
+            if self.live_stats:
+                self.log.info("DAYTRADER-HEUTE %s: %s", today, ", ".join(
+                    f"{k} {v}" for k, v in sorted(self.live_stats.items(), key=lambda kv: -kv[1])))
+                self.live_stats = {}
             for sym in list(meta):
                 self._sell(sym, "Handelsschluss", meta, now)
             self.pending.clear()
@@ -301,9 +311,14 @@ class DayTrader:
             if not pos or not plan:
                 continue
             if pos.current_price <= plan["stop"]:
-                self._sell(sym, f"Stop-Loss {pos.pnl_pct:+.1%}", meta, now)
+                self._sell(sym, ("Einstand-Stop" if plan.get("be") else "Stop-Loss") + f" {pos.pnl_pct:+.1%}", meta, now)
             elif pos.current_price >= plan["target"]:
                 self._sell(sym, f"Kursziel {pos.pnl_pct:+.1%}", meta, now)
+            elif c.breakeven_r > 0 and not plan.get("be") and "entry" in plan and \
+                    pos.current_price >= plan["entry"] + c.breakeven_r * (plan["entry"] - plan["stop"]):
+                plan.update(stop=plan["entry"], be=True)  # ab jetzt kein Verlust mehr möglich (bis auf Spanne)
+                self.storage.set(f"plan:{sym}", json.dumps(plan))
+                self.broker.ensure_stop(sym, pos.qty, plan["stop"])
 
         d = self._day(today)
         unrealized = sum(held[s].market_value - meta[s] for s in meta if s in held)
@@ -335,7 +350,8 @@ class DayTrader:
                 plan = breakout_setup(bars, c)
             else:
                 new_bar = bool(bars) and self._seen.get(sym) != bars[-1].time  # jede Kerze nur einmal zählen
-                plan = pullback_setup(bars, c, self.stats if new_bar else None)
+                counter = self.stats if self.stats is not None else self.live_stats
+                plan = pullback_setup(bars, c, counter if new_bar else None)
                 if bars:
                     self._seen[sym] = bars[-1].time
             if plan and (sym not in self.pending or self.pending[sym]["trigger"] != plan["trigger"]):
@@ -369,7 +385,8 @@ class DayTrader:
             cash -= cost
             self.storage.open_meta(sym, cost, fill.price, when=now)
             meta[sym] = cost
-            self.storage.set(f"plan:{sym}", json.dumps({"stop": plan["stop"], "target": plan["target"]}))
+            self.storage.set(f"plan:{sym}", json.dumps({"stop": plan["stop"], "target": plan["target"],
+                                                        "entry": fill.price}))
             d["entries"] += 1
             self._save_day(today, d)
             reason = f"{plan['why']}, Stop {plan['stop']:.2f}, Ziel {plan['target']:.2f}"
