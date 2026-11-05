@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.7
+- Varianten-Backtest vergleicht zusätzlich „aggressiv“ mit 4 und 5 Positionen (breitere Streuung). Am Handel ändert sich nichts.
+
 ## 0.7.6
 - Tagesänderung: Fehlt der gemerkte Schlusswert (Update am Abend), wird der letzte Eintrag im Verlauf genommen.
 
