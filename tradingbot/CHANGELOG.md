@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.8
+- Daytrader: optionaler Einstand-Stop (Stop wandert auf den Kaufkurs, sobald der Trade 1R im Plus ist, auch bei Alpaca).
+- Daytrader schreibt zum Handelsschluss ins Protokoll, an welchen Regeln die Signale des Tages gescheitert sind (DAYTRADER-HEUTE).
+- Varianten-Backtest vergleicht jetzt Ausstiege (Ziel 1,5R, Einstand-Stop) und 40 statt 25 Aktien. Gehandelt wird weiter mit „locker, 25 Aktien“.
+
 ## 0.7.7
 - Varianten-Backtest vergleicht zusätzlich „aggressiv“ mit 4 und 5 Positionen (breitere Streuung). Am Handel ändert sich nichts.
 

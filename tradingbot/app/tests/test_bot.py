@@ -535,3 +535,33 @@ def test_daytrader_backtest_counts_exit_reasons():
     rise = [100] * 6 + [100 + 0.2 * i for i in range(1, 70)]
     res = backtest(DayConfig(watchlist=["AAA"], start_budget=1000, **BREAKOUT), {"AAA": _day_bars(rise[:78])})
     assert sum(res["exits"].values()) == res["trades"]
+
+
+def test_daytrader_moves_stop_to_breakeven():
+    from tradingbot.daytrader import DayConfig, DayTrader
+    from tradingbot.broker.base import Position
+    from tradingbot.storage import Storage
+    from zoneinfo import ZoneInfo
+    import json as _json
+
+    class B:
+        def __init__(self):
+            self.price, self.stops = 101.5, []
+        def market_open(self): return True
+        def positions(self): return {"AAA": Position("AAA", 1.0, 100.0, self.price)}
+        def minutes_to_close(self, now): return 300
+        def ensure_stop(self, sym, qty, stop): self.stops.append(stop)
+        def sell_all(self, sym): return None
+        def intraday_bars(self, *a, **k): return {}
+        def account(self):
+            from tradingbot.broker.base import Account
+            return Account(0, 0, 0)
+
+    st = Storage(":memory:")
+    now = datetime(2026, 11, 5, 11, 0, tzinfo=ZoneInfo("America/New_York"))
+    st.open_meta("AAA", 100.0, 100.0, when=now)
+    st.set("plan:AAA", _json.dumps({"stop": 99.0, "target": 103.0, "entry": 100.0}))
+    b = B()
+    DayTrader(DayConfig(watchlist=["AAA"], breakeven_r=1.0), b, st).cycle(now)
+    plan = _json.loads(st.get("plan:AAA"))
+    assert plan["stop"] == 100.0 and plan["be"] and b.stops == [100.0]
