@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.9
+- Daytrader handelt jetzt mit dem gelockerten Regelwerk auf 40 Werten (25 Aktien plus 15 weitere große Aktien und Index-ETFs), Kursziel 1,5R statt 2R und Einstand-Stop ab 1R. 40-Tage-Backtest: +2,5 % bei 89 Trades (vorher +1,3 % bei 71 Trades).
+- Varianten-Backtest beim Start auf drei Varianten gekürzt.
+
 ## 0.7.8
 - Daytrader: optionaler Einstand-Stop (Stop wandert auf den Kaufkurs, sobald der Trade 1R im Plus ist, auch bei Alpaca).
 - Daytrader schreibt zum Handelsschluss ins Protokoll, an welchen Regeln die Signale des Tages gescheitert sind (DAYTRADER-HEUTE).

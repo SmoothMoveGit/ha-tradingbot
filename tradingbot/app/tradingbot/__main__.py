@@ -98,23 +98,20 @@ def daytrade(cfg) -> int:
     from .daytrader import EXTRA_SYMBOLS, LOOSE, MORE_SYMBOLS, DayTrader, backtest as day_backtest, config_from_env
     from .earnings import EarningsCalendar
     from .homeassistant import HomeAssistantReporter
-    # Seit 0.7.4: gelockertes Regelwerk auf 25 Aktien (bester Wert im 40-Tage-Vergleich, Michi hat Anpassungen freigegeben)
+    # Seit 0.7.9: gelockertes Regelwerk auf 40 Werten, Ziel 1,5R, Einstand-Stop ab 1R
+    # (bester Wert im 40-Tage-Vergleich vom 05.11.: +2,5 % bei 89 Trades; Michi hat Anpassungen freigegeben)
     wide = list(dict.fromkeys(cfg.watchlist + EXTRA_SYMBOLS))
-    dcfg = config_from_env(wide, **LOOSE)
+    wider = list(dict.fromkeys(wide + MORE_SYMBOLS))
+    exit_b = {"reward_risk": 1.5, "breakeven_r": 1.0}
+    dcfg = config_from_env(wider, **LOOSE, **exit_b)
     broker = AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)  # Daytrader nie mit echtem Geld
     log = logging.getLogger("tradingbot.daytrader")
     def compare() -> None:
         try:
-            wider = list(dict.fromkeys(wide + MORE_SYMBOLS))
             bars = broker.intraday_bars(wider, days=70)
-            exit_b = {"reward_risk": 1.5, "breakeven_r": 1.0}
             variants = [
-                ("locker 25 Aktien (aktiv)", {**LOOSE, "watchlist": wide}),
-                ("locker 25, Ziel 1,5R", {**LOOSE, "watchlist": wide, "reward_risk": 1.5}),
-                ("locker 25, Einstand ab 1R", {**LOOSE, "watchlist": wide, "breakeven_r": 1.0}),
-                ("locker 25, Ziel 1,5R + Einstand", {**LOOSE, "watchlist": wide, **exit_b}),
-                ("locker 40 Aktien", {**LOOSE, "watchlist": wider}),
-                ("locker 40, Ziel 1,5R + Einstand", {**LOOSE, "watchlist": wider, **exit_b}),
+                ("locker 40, Ziel 1,5R + Einstand (aktiv)", {**LOOSE, "watchlist": wider, **exit_b}),
+                ("locker 25 Aktien (bis 0.7.8)", {**LOOSE, "watchlist": wide}),
                 ("Regelwerk original 10 Aktien", {}),
             ]
             for name, over in variants:
