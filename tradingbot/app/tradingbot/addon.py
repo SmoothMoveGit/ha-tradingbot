@@ -25,6 +25,7 @@ def main() -> int:
         "TRADINGBOT_MONTHLY_DEPOSIT": str(opts.get("monthly_deposit", "")),
         "TRADINGBOT_EXTRA_DEPOSIT": str(opts.get("extra_deposit", "")),
         "TRADINGBOT_PROFILE": opts.get("strategy", ""),
+        "TRADINGBOT_SEC_USER_AGENT": opts.get("sec_user_agent", ""),
     }
     if opts.get("anthropic_api_key"):
         env["TRADINGBOT_SENTIMENT"] = "claude"

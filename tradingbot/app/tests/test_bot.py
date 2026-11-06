@@ -621,3 +621,55 @@ def test_make_room_for_new_position_after_switch_to_four():
     assert sum("Umschichten" in x for x in reasons) == 3
     bot.run_cycle()  # danach kein weiteres Umschichten
     assert sum("Umschichten" in t[6] for t in bot.storage.recent_trades(20)) == 3
+
+
+SEC_FEED = b"""<?xml version="1.0" encoding="ISO-8859-1" ?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<entry><category label="form type" term="8-K"/>
+<content type="text/xml"><accession-number>0000000000-26-000001</accession-number><filing-type>8-K</filing-type>
+<items-desc>items 3.01 and 9.01</items-desc></content>
+<link href="https://www.sec.gov/a1"/><updated>2026-11-05T16:30:00-05:00</updated></entry>
+<entry><content type="text/xml"><accession-number>0000000000-26-000002</accession-number><filing-type>8-K</filing-type>
+<items-desc>items 5.02</items-desc></content>
+<link href="https://www.sec.gov/a2"/><updated>2026-11-04T08:00:00-05:00</updated></entry>
+<entry><content type="text/xml"><accession-number>0000000000-26-000003</accession-number><filing-type>8-K</filing-type>
+<items-desc>items 2.02 and 9.01</items-desc></content>
+<link href="https://www.sec.gov/a3"/><updated>2026-11-03T08:00:00-05:00</updated></entry>
+</feed>"""
+
+
+def test_sec_parse_keeps_only_important_items():
+    from tradingbot.sec import parse_atom
+    out = parse_atom(SEC_FEED, "AAA")
+    assert [f["sec_items"] for f in out] == [["3.01"], ["5.02"]]
+    assert out[0]["hard"] and not out[1]["hard"]
+    assert out[0]["time"] == datetime(2026, 11, 5, 21, 30, tzinfo=timezone.utc)
+
+
+def test_sec_hard_filing_sells_and_blocks():
+    from tradingbot import sec
+    from tradingbot.sec import parse_atom
+    bot, broker = make_bot()
+    bot.run_cycle()
+    assert "AAA" in bot.storage.all_meta()
+
+    class FakeSec:
+        def fetch(self, symbols, since):
+            return [f | {"time": datetime.now(timezone.utc)} for f in parse_atom(SEC_FEED, "AAA")]
+
+    bot.news.sec = FakeSec()
+    bot.run_cycle()
+    assert "AAA" not in bot.storage.all_meta()
+    assert "SEC-Meldung: Delisting-Warnung" in bot.storage.recent_trades(1)[0][6]
+    bot.storage.set("sold:AAA", "2000-01-01")  # Cooldown ausschalten: nur die SEC-Sperre soll greifen
+    bot.news.sec = None
+    bot.run_cycle()
+    assert "AAA" not in bot.storage.all_meta()
+    assert sec.blocked(bot.storage, "AAA", date.today() + timedelta(days=31)) is None
+
+
+def test_sec_user_agent_required():
+    from tradingbot.sec import valid_user_agent
+    assert valid_user_agent("Max Muster max@example.com")
+    assert not valid_user_agent("tradingbot")
+    assert not valid_user_agent("")

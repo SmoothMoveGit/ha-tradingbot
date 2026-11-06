@@ -27,6 +27,9 @@ configuration:
   notify_service:
     name: Notify service
     description: "e.g. notify.mobile_app_phone. Empty = persistent notification."
+  sec_user_agent:
+    name: SEC contact (name and email)
+    description: "e.g. Jane Doe jane@example.com. Required by the SEC to read 8-K filings. Empty = no SEC filings."
   anthropic_api_key:
     name: Anthropic API key (optional)
   live_confirmation:

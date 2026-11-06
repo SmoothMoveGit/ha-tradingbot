@@ -7,6 +7,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 
+from . import sec
 from .sentiment import SentimentEngine
 
 log = logging.getLogger(__name__)
@@ -97,6 +98,10 @@ class NewsAnalyzer:
         self.cfg, self.storage, self.broker = cfg, storage, broker
         self.engine = SentimentEngine(cfg.news.sentiment_engine, cfg.news.claude_model)
         log.info("Nachrichtenbewertung: %s", "Claude (" + self.engine.model + ")" if self.engine.engine == "claude" else "Lexikon")
+        ua = cfg.news.sec_user_agent
+        self.sec = sec.SecFilings(ua, storage) if sec.valid_user_agent(ua) else None
+        if ua and not self.sec:
+            log.warning("SEC-User-Agent braucht Name und E-Mail, SEC-Meldungen sind aus")
 
     def refresh(self) -> int:
         """Neue Nachrichten holen, bewerten, speichern. Gibt Anzahl neuer Artikel zurück."""
@@ -107,6 +112,8 @@ class NewsAnalyzer:
             partners = sorted({p for s in wl for p in related.get(s, [])} - set(wl))
             items += self.broker.fetch_news(wl + partners, since, self.cfg.news.max_alpaca_news)
         items += fetch_rss(self.cfg.news.rss_feeds, since)
+        if self.sec:
+            items += self._sec_filings(since)
         new, seen = [], set()
         for i in items:  # gleiche Meldung aus mehreren Quellen nur einmal, Unwichtiges gar nicht bewerten
             key = _norm_headline(i["headline"])
@@ -138,6 +145,24 @@ class NewsAnalyzer:
         if new:
             log.info("%d neue Nachrichten bewertet", len(new))
         return len(new)
+
+    def _sec_filings(self, since: datetime) -> list[dict]:
+        """Schwere 8-K-Meldungen direkt als Verkaufs- und Sperrgrund, die übrigen zur Bewertung weitergeben."""
+        review = []
+        for f in self.sec.fetch(self.cfg.watchlist, since):
+            if self.storage.has_news(f["id"]):
+                continue
+            if f["hard"]:
+                sym = f["symbols"][0]
+                self.storage.add_news(f, sym, -1.0)
+                sec.block(self.storage, sym, f["label"], f["time"].date())
+                log.warning("SEC-Meldung %s: %s -> Verkauf und %d Tage Kaufsperre", sym, f["label"], sec.BLOCK_DAYS)
+            else:
+                review.append(f)
+        return review
+
+    def sec_block(self, symbol: str, today) -> str | None:
+        return sec.blocked(self.storage, symbol, today)
 
     def score(self, symbol: str, now: datetime | None = None) -> float:
         """Zeitlich gewichtete Stimmung (neuere Nachrichten zählen mehr). -1..1."""

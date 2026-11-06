@@ -55,6 +55,7 @@ class NewsConfig:
     max_alpaca_news: int = 500            # pro Abruf (Alpaca liefert seitenweise zu je 50)
     related_weight: float = 0.5           # Lexikon: Nachricht über Partnerfirma zählt halb
     earnings_guard_days: int = 2          # so viele Tage vor Quartalszahlen keine neuen Käufe
+    sec_user_agent: str = ""              # Name und E-Mail für die SEC; leer = keine SEC-Meldungen
 
 
 DEFAULT_RELATED: dict[str, list[str]] = {
@@ -154,6 +155,8 @@ def load_config(path: str | Path | None = None) -> Config:
         cfg.risk.monthly_deposit = float(os.environ["TRADINGBOT_MONTHLY_DEPOSIT"])
     if os.getenv("TRADINGBOT_EXTRA_DEPOSIT"):
         cfg.risk.extra_deposits = float(os.environ["TRADINGBOT_EXTRA_DEPOSIT"])
+    if os.getenv("TRADINGBOT_SEC_USER_AGENT"):
+        cfg.news.sec_user_agent = os.environ["TRADINGBOT_SEC_USER_AGENT"]
     if os.getenv("TRADINGBOT_DB_PATH"):
         cfg.db_path = os.environ["TRADINGBOT_DB_PATH"]
     if os.getenv("ANTHROPIC_API_KEY") and os.getenv("TRADINGBOT_SENTIMENT"):

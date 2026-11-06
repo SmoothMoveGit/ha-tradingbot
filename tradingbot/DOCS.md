@@ -48,6 +48,15 @@ Alle 15 Minuten holt der Bot die Meldungen der letzten 24 Stunden: Alpaca-Nachri
 
 Vor Quartalszahlen (Standard: 2 Tage) kauft der Bot die betroffene Aktie nicht neu.
 
+## SEC-Pflichtmeldungen (8-K)
+
+Trägst du unter **SEC-Kontakt** deinen Namen und deine E-Mail ein (z. B. `Max Muster max@example.com`), liest der Bot alle 30 Minuten die Pflichtmeldungen der US-Börsenaufsicht zu den Aktien der Watchlist. Die SEC verlangt diese Angabe, sie wird nur an die SEC geschickt.
+
+- **Insolvenz (1.03), Delisting-Warnung (3.01) oder frühere Zahlen unzuverlässig (4.02):** Der Bot verkauft die Aktie sofort und kauft sie 30 Tage lang nicht.
+- **Cyberangriff (1.05), Abschreibung (2.06), Wechsel im Vorstand (5.02):** Die Meldung wird wie eine normale Nachricht bewertet.
+
+Idee nach trader-news aus github.com/Jakeschincariol/day-trader-skill (MIT-Lizenz).
+
 ## Strategie
 
 | Strategie | Trend | Stops | Positionen | Reserve | Not-Aus |

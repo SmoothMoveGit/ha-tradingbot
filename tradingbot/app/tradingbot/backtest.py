@@ -45,6 +45,7 @@ def run_backtest(cfg, bars: dict[str, list[Bar]], start: date | None = None, end
     cfg.news.use_alpaca_news = False
     cfg.news.rss_feeds = []
     cfg.news.sentiment_engine = "lexicon"
+    cfg.news.sec_user_agent = ""
     cfg.risk.broker_stops = False
     budget = cfg.risk.start_budget
 

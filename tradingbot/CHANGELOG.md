@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.3
+- Neue Nachrichtenquelle: SEC-Pflichtmeldungen (8-K). Insolvenz, Delisting-Warnung oder unzuverlässige frühere Zahlen führen zum sofortigen Verkauf und 30 Tagen Kaufsperre; Cyberangriff, Abschreibung und Vorstandswechsel gehen in die Nachrichtenbewertung. Neue Option *SEC-Kontakt* (Name und E-Mail, verlangt die SEC), leer = aus.
+
 ## 0.8.2
 - Daytrader: Ideen aus dem day-trader-skill (github.com/Jakeschincariol/day-trader-skill) eingebaut, vorerst nur im Backtest. Neu: Opening-Range-Breakout (Spanne der ersten 15 min, Schluss einer 5-min-Kerze darüber, Stop Mitte der Spanne) als eigene Strategie oder zusätzlich zum Pullback, und ein Tagesfilter (nur Aktien über ihrem 20-Tage-Schnitt).
 - Varianten-Backtest beim Start vergleicht 6 Varianten auf rund 60 Handelstagen Daten (40 Testtage). Der aktive Handel bleibt unverändert, bis die Zahlen da sind.

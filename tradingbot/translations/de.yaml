@@ -31,6 +31,9 @@ configuration:
   notify_service:
     name: Benachrichtigungsdienst
     description: "z.B. notify.mobile_app_dein_handy. Leer = Benachrichtigung in Home Assistant."
+  sec_user_agent:
+    name: SEC-Kontakt (Name und E-Mail)
+    description: "z.B. Max Muster max@example.com. Die SEC verlangt das für den Abruf der Pflichtmeldungen (8-K). Leer = keine SEC-Meldungen."
   anthropic_api_key:
     name: Anthropic API Key (optional)
     description: Bessere Nachrichtenbewertung mit Claude. Leer = lokale Bewertung.

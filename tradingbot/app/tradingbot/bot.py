@@ -71,7 +71,7 @@ class TradingBot:
             gap = target - meta[sym]
             if not sig or sig.score < st.buy_threshold or gap < max(r.min_order_value, target * r.top_up_min_gap_pct):
                 continue
-            if self.news.latest_shock(sym) <= st.panic_news_threshold:
+            if self.news.latest_shock(sym) <= st.panic_news_threshold or self.news.sec_block(sym, today):
                 continue
             if soon is None and self.earnings:
                 soon = self.earnings.upcoming(self.cfg.watchlist, today, self.cfg.news.earnings_guard_days)
@@ -308,6 +308,8 @@ class TradingBot:
         for sym, pos in positions.items():
             high = self.storage.update_high(sym, pos.current_price)
             reason = self.risk.exit_reason(pos.pnl_pct, pos.current_price, high)
+            if not reason and (filing := self.news.sec_block(sym, today)):
+                reason = f"SEC-Meldung: {filing}"
             if not reason and self._news_panic(sym):
                 reason = "sehr negative Nachricht"
             sig = signals.get(sym)
@@ -327,6 +329,7 @@ class TradingBot:
                 (
                     s for s in signals.values()
                     if s.score >= st.buy_threshold and s.symbol not in meta and not self.in_cooldown(s.symbol, today)
+                    and not self.news.sec_block(s.symbol, today)
                 ),
                 key=lambda s: s.score, reverse=True,
             )
