@@ -30,7 +30,7 @@ NY = ZoneInfo("America/New_York")
 class DayConfig:
     watchlist: list
     start_budget: float = 1100.0
-    strategy: str = "pullback"          # pullback (Regelwerk 15 min) | breakout (alt, 5 min)
+    strategy: str = "pullback"          # pullback (Regelwerk 15 min) | orb | combo (pullback + orb) | breakout (alt)
     # Pullback-Regelwerk
     bar_minutes: int = 15
     risk_per_trade_pct: float = 0.005   # 0,5 % des Kapitals je Trade
@@ -50,6 +50,12 @@ class DayConfig:
     resistance_filter: bool = True
     entry_valid_bars: int = 1           # so viele Kerzen bleibt der Einstieg gültig
     breakeven_r: float = 0.0            # >0: Stop auf Einstand, sobald der Kurs so viele R im Plus ist
+    trend_ma: int = 0                   # >0: nur Aktien, deren Vortagesschluss über dem N-Tage-Schnitt liegt
+    # Opening-Range-Breakout (aus dem day-trader-skill): Spanne der ersten 15 min, Schluss einer
+    # 5-min-Kerze darüber = Einstieg, Stop Mitte der Spanne, Ziel reward_risk x Risiko
+    orb_minutes: int = 15
+    orb_stop: str = "mid"               # mid | low
+    orb_vol_factor: float = 0.0         # >0: Ausbruchskerze braucht so viel x Volumen der Spannen-Kerzen
     # Ausbruch-Variante
     take_profit_pct: float = 0.015
     stop_loss_pct: float = 0.010
@@ -217,6 +223,39 @@ def pullback_setup(bars: list[Bar], cfg: DayConfig, stats: dict | None = None) -
             "why": f"Pullback RSI {r:.0f}, Vol {c.volume / (sum(vols) / len(vols)):.1f}x" if vols else "Pullback"}
 
 
+def orb_setup(bars5: list[Bar], cfg: DayConfig, now: datetime, stats: dict | None = None) -> dict | None:
+    """Opening-Range-Breakout auf 5-Minuten-Kerzen (Regel aus dem day-trader-skill, trader-entry/-exit):
+    Spanne = erste orb_minutes, Auslöser = erste fertige Kerze danach, die ÜBER dem Spannenhoch schließt.
+    Nur der erste Ausbruch des Tages zählt; nur wenn er gerade erst passiert ist (letzte fertige Kerze)."""
+    now = now.astimezone(NY)
+    done = [b for b in bars5 if session_of(b) == now.date() and b.time + timedelta(minutes=5) <= now]
+    open_t = now.replace(hour=9, minute=30, second=0, microsecond=0)
+    rng = [b for b in done if b.time < open_t + timedelta(minutes=cfg.orb_minutes)]
+    after = [b for b in done if b.time >= open_t + timedelta(minutes=cfg.orb_minutes)]
+    if len(rng) < cfg.orb_minutes // 5 or not after:
+        return None
+    hi, lo = max(b.high for b in rng), min(b.low for b in rng)
+    first = next((b for b in after if b.close > hi), None)
+    if first is None or first is not after[-1]:
+        return None  # noch kein Ausbruch, oder er ist schon älter (nur der erste, frische zählt)
+    def no(reason: str):
+        if stats is not None:
+            stats[reason] = stats.get(reason, 0) + 1
+        return None
+    if cfg.orb_vol_factor > 0 and first.volume < cfg.orb_vol_factor * sum(b.volume for b in rng) / len(rng):
+        return no("ORB zu wenig Volumen")
+    trigger = first.close
+    stop = (hi + lo) / 2 if cfg.orb_stop == "mid" else lo
+    risk = trigger - stop
+    if risk <= 0 or risk / trigger < cfg.min_risk_pct:
+        return no("ORB Stop zu eng")
+    if stats is not None:
+        stats["ORB-Signal"] = stats.get("ORB-Signal", 0) + 1
+    return {"trigger": trigger, "stop": stop, "target": trigger + cfg.reward_risk * risk,
+            "atr": atr(done[-15:]) if len(done) > 1 else 0.0, "expires": first.time + timedelta(minutes=15),
+            "why": f"ORB über {hi:.2f}"}
+
+
 def breakout_setup(bars: list[Bar], cfg: DayConfig) -> dict | None:
     """Alte Variante: Ausbruch über das 30-Minuten-Hoch, über VWAP, sofort kaufen."""
     today = session_of(bars[-1]) if bars else None
@@ -245,6 +284,19 @@ class DayTrader:
         self.stats: dict | None = None  # im Backtest: Gründe, warum kein Setup entstand
         self._seen: dict[str, datetime] = {}
         self.live_stats: dict = {}  # live: warum heute kein Setup entstand, Ausgabe zum Tagesende
+        self._trend: dict[tuple[str, date], bool] = {}
+
+    def _trend_ok(self, sym: str, today: date) -> bool:
+        """Vortagesschluss über dem trend_ma-Tage-Schnitt (Tagesfilter wie im Skill-Scanner)."""
+        key = (sym, today)
+        if key not in self._trend:
+            n = self.cfg.trend_ma
+            try:
+                closes = [b.close for b in self.broker.daily_bars(sym, n + 5) if session_of(b) < today][-n:]
+            except Exception:
+                closes = []
+            self._trend[key] = len(closes) < n or closes[-1] > sum(closes) / n  # ohne Daten nicht sperren
+        return self._trend[key]
 
     def capital(self) -> float:
         return self.cfg.start_budget + self.storage.realized_pnl()
@@ -337,23 +389,34 @@ class DayTrader:
             return
         self.status = "handelt"
 
-        raw = self.broker.intraday_bars(c.watchlist, now, days=0 if c.strategy == "breakout" else 6)
+        raw = self.broker.intraday_bars(c.watchlist, now, days=0 if c.strategy in ("breakout", "orb") else 6)
         soon = {}
-        if self.earnings and c.strategy == "pullback":
+        if self.earnings and c.strategy != "breakout":
             soon = self.earnings.upcoming(c.watchlist, today, c.earnings_guard_days)
         for sym in c.watchlist:
             bars5 = raw.get(sym, [])
             if not bars5 or sym in meta or sym in soon:
                 continue
+            counter = self.stats if self.stats is not None else self.live_stats
+            if c.trend_ma and c.strategy != "breakout" and not self._trend_ok(sym, today):
+                if self._seen.get(sym + ":trend") != today:
+                    counter["unter Tages-Schnitt"] = counter.get("unter Tages-Schnitt", 0) + 1
+                    self._seen[sym + ":trend"] = today
+                continue
             bars = aggregate(bars5, c.bar_minutes, now)
+            plan = None
             if c.strategy == "breakout":
                 plan = breakout_setup(bars, c)
-            else:
+            if c.strategy in ("pullback", "combo"):
                 new_bar = bool(bars) and self._seen.get(sym) != bars[-1].time  # jede Kerze nur einmal zählen
-                counter = self.stats if self.stats is not None else self.live_stats
                 plan = pullback_setup(bars, c, counter if new_bar else None)
                 if bars:
                     self._seen[sym] = bars[-1].time
+            if not plan and c.strategy in ("orb", "combo"):
+                last5 = bars5[-1].time if bars5 else None
+                new5 = self._seen.get(sym + ":5") != last5
+                plan = orb_setup(bars5, c, now, counter if new5 else None)
+                self._seen[sym + ":5"] = last5
             if plan and (sym not in self.pending or self.pending[sym]["trigger"] != plan["trigger"]):
                 self.pending[sym] = plan
 
@@ -489,6 +552,20 @@ class IntradaySim:
 
     def ensure_stop(self, *a) -> None:
         pass
+
+    def daily_bars(self, sym: str, days: int) -> list[Bar]:
+        """Tageskerzen aus den 5-Minuten-Kerzen (nur abgeschlossene Tage vor der Simulationszeit)."""
+        if not hasattr(self, "_daily"):
+            self._daily = {}
+        if sym not in self._daily:
+            byday: dict[date, list[Bar]] = {}
+            for b in self.bars.get(sym, []):
+                byday.setdefault(session_of(b), []).append(b)
+            self._daily[sym] = [Bar(datetime(d.year, d.month, d.day, 16, tzinfo=NY), bs[0].open, max(x.high for x in bs),
+                                    min(x.low for x in bs), bs[-1].close, sum(x.volume for x in bs))
+                                for d, bs in sorted(byday.items())]
+        today = self.now.astimezone(NY).date()
+        return [b for b in self._daily[sym] if session_of(b) < today][-days:]
 
     def last_sell_fill(self, *a):
         return None

@@ -567,6 +567,38 @@ def test_daytrader_moves_stop_to_breakeven():
     assert plan["stop"] == 100.0 and plan["be"] and b.stops == [100.0]
 
 
+def test_daytrader_orb_setup_only_first_fresh_breakout():
+    from zoneinfo import ZoneInfo
+    from tradingbot.daytrader import DayConfig, orb_setup
+    ny = ZoneInfo("America/New_York")
+    # Spanne 9:30-9:45 bei 100 (Hoch 100,1, Tief 99,9), die 9:55-Kerze schließt bei 100,5
+    bars = _day_bars([100, 100, 100, 100, 100, 100.5, 100.6])
+    cfg = DayConfig(watchlist=["AAA"], reward_risk=2.0)
+    assert orb_setup(bars, cfg, datetime(2026, 11, 2, 9, 59, tzinfo=ny)) is None  # 9:55-Kerze noch offen
+    stats = {}
+    plan = orb_setup(bars, cfg, datetime(2026, 11, 2, 10, 0, tzinfo=ny), stats)
+    assert plan and plan["trigger"] == 100.5 and plan["stop"] == pytest.approx(100.0)
+    assert plan["target"] == pytest.approx(101.5) and stats == {"ORB-Signal": 1}
+    # eine Kerze später ist der Ausbruch nicht mehr frisch: kein neues Signal am selben Tag
+    assert orb_setup(bars, cfg, datetime(2026, 11, 2, 10, 5, tzinfo=ny)) is None
+
+
+def test_daytrader_orb_backtest_and_trend_filter():
+    from tradingbot.daytrader import DayConfig, IntradaySim, backtest
+    days = [(2026, 10, d) for d in (5, 6, 7, 8, 9, 12, 13, 14, 15, 16)] + [(2026, 10, 19)]
+    falling = [b for i, d in enumerate(days[:-1]) for b in _day_bars([110 - i] * 78, day=d)]
+    today = _day_bars([100] * 6 + [100.5 + 0.05 * i for i in range(72)], day=days[-1])
+    bars = {"AAA": falling + today}
+    res = backtest(DayConfig(watchlist=["AAA"], strategy="orb", start_budget=1000), bars, test_days=1)
+    assert res["trades"] == 1 and res["stats"].get("ORB-Signal") == 1
+    sim = IntradaySim(bars, 1000)
+    sim.set_time(today[10].time)
+    assert [b.close for b in sim.daily_bars("AAA", 3)] == [103, 102, 101]
+    # Tagesfilter: Vortagesschluss unter dem 5-Tage-Schnitt -> kein Kauf
+    res = backtest(DayConfig(watchlist=["AAA"], strategy="orb", start_budget=1000, trend_ma=5), bars, test_days=1)
+    assert res["trades"] == 0 and res["stats"].get("unter Tages-Schnitt") == 1
+
+
 def test_make_room_for_new_position_after_switch_to_four():
     bot, broker = make_bot(("AAA", "BBB", "CCC", "DDD"), budget=1000.0)
     r = bot.cfg.risk
