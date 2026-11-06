@@ -23,7 +23,7 @@ configuration:
     name: Day trader start budget (USD)
   strategy:
     name: Strategy
-    description: "standard = short trend, tight stops. trendfolger = long trend 50/200, 15 % stops. aggressiv = like trendfolger, but 3 large positions, no cash reserve, emergency stop at 50 % loss."
+    description: "standard = short trend, tight stops. trendfolger = long trend 50/200, 15 % stops. aggressiv = like trendfolger, but 4 large positions, no cash reserve, emergency stop at 50 % loss."
   notify_service:
     name: Notify service
     description: "e.g. notify.mobile_app_phone. Empty = persistent notification."

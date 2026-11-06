@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.0
+- Strategie *aggressiv*: 4 Aktien zu je 25 % statt 3 zu je 34 % (breitere Streuung, im Backtest gleiche Rendite). Bestehende Positionen bleiben, die vierte kommt beim nächsten Kauf dazu.
+
 ## 0.7.9
 - Daytrader handelt jetzt mit dem gelockerten Regelwerk auf 40 Werten (25 Aktien plus 15 weitere große Aktien und Index-ETFs), Kursziel 1,5R statt 2R und Einstand-Stop ab 1R. 40-Tage-Backtest: +2,5 % bei 89 Trades (vorher +1,3 % bei 71 Trades).
 - Varianten-Backtest beim Start auf drei Varianten gekürzt.

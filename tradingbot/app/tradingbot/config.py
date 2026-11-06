@@ -130,9 +130,9 @@ PROFILES: dict[str, dict] = {
     "trendfolger": {"strategy": _TREND_STRATEGY,
                     "risk": {**_TREND_STOPS, "max_positions": 4, "max_position_pct": 0.20, "min_cash_reserve_pct": 0.10,
                              "daily_loss_limit_pct": 0.03, "max_drawdown_pct": 0.25}},
-    # alles investiert, 3 große Positionen, Not-Aus erst bei 50 % Rückgang
+    # alles investiert, 4 Positionen à 25 % (bis 0.7.9: 3 à 34 %), Not-Aus erst bei 50 % Rückgang
     "aggressiv": {"strategy": _TREND_STRATEGY,
-                  "risk": {**_TREND_STOPS, "max_positions": 3, "max_position_pct": 0.34, "min_cash_reserve_pct": 0.0,
+                  "risk": {**_TREND_STOPS, "max_positions": 4, "max_position_pct": 0.25, "min_cash_reserve_pct": 0.0,
                            "daily_loss_limit_pct": 0.10, "max_drawdown_pct": 0.50}},
 }
 

@@ -127,10 +127,10 @@ VARIANTS: list[tuple[str, dict]] = [
     ("nur Signal, keine Stops", {"risk": {"stop_loss_pct": 0.99, "trailing_stop_pct": 0.99, "take_profit_pct": 10.0}}),
 ]
 _TREND = dict(VARIANTS)["Trendfolger 50/200"]
-VARIANTS.append(("aggressiv (Trendfolger, 3 Pos.)", PROFILES["aggressiv"]))
+VARIANTS.append(("aggressiv (Trendfolger, 4 Pos.)", PROFILES["aggressiv"]))
 _AGGRO = PROFILES["aggressiv"]
 # breitere Streuung bei sonst gleichen Regeln wie aggressiv
-for _n, _pct in ((4, 0.25), (5, 0.20)):
+for _n, _pct in ((3, 0.34), (5, 0.20)):
     VARIANTS.append((f"aggressiv, {_n} Pos.", {**_AGGRO, "risk": {**_AGGRO["risk"], "max_positions": _n,
                                                                    "max_position_pct": _pct}}))
 # Hebel wie bei Faktor-Zertifikaten: tägliche Kursänderung mal Faktor, dazu laufende Kosten.

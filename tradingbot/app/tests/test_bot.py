@@ -355,7 +355,7 @@ def test_strategy_profile_from_env(monkeypatch):
     from tradingbot.config import load_config
     monkeypatch.setenv("TRADINGBOT_PROFILE", "aggressiv")
     cfg = load_config(None)
-    assert cfg.risk.max_positions == 3 and cfg.risk.max_drawdown_pct == 0.5 and cfg.strategy.sma_slow == 200
+    assert cfg.risk.max_positions == 4 and cfg.risk.max_drawdown_pct == 0.5 and cfg.strategy.sma_slow == 200
 
 
 def test_trend_profile_needs_confirmed_bad_news():
