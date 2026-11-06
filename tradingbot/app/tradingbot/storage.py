@@ -94,6 +94,11 @@ class Storage:
         row = self.get_meta(symbol)
         return row[1] if row else price
 
+    def reduce_meta(self, symbol: str, fraction: float) -> None:
+        """Einstand nach einem Teilverkauf anteilig senken."""
+        self.db.execute("UPDATE positions_meta SET cost=cost*? WHERE symbol=?", (max(0.0, 1 - fraction), symbol))
+        self.db.commit()
+
     def close_meta(self, symbol: str) -> None:
         self.db.execute("DELETE FROM positions_meta WHERE symbol=?", (symbol,))
         self.db.commit()

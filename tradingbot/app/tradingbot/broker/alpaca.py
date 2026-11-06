@@ -149,6 +149,21 @@ class AlpacaBroker(Broker):
         o = filled[0]
         return Fill(symbol, "sell", float(o.filled_qty), float(o.filled_avg_price))
 
+    def sell_qty(self, symbol: str, qty: float) -> Fill | None:
+        self._cancel_open(symbol)  # Stop-Order blockiert sonst die Stückzahl
+        req = MarketOrderRequest(
+            symbol=symbol, qty=round(qty, 6), side=OrderSide.SELL, time_in_force=TimeInForce.DAY
+        )
+        try:
+            o = self._wait_fill(self.trading.submit_order(req).id)
+        except APIError as e:
+            log.error("Teilverkauf %s abgelehnt: %s", symbol, e)
+            return None
+        if not o.filled_qty or float(o.filled_qty) == 0:
+            log.warning("Teilverkauf %s nicht ausgeführt (Status %s)", symbol, o.status)
+            return None
+        return Fill(symbol, "sell", float(o.filled_qty), float(o.filled_avg_price))
+
     def sell_all(self, symbol: str) -> Fill | None:
         self._cancel_open(symbol)
         try:

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.1
+- Umschichten: Fehlt Bargeld für eine weitere Position, kürzt der Bot zu große Positionen auf ihre Zielgröße (bei *aggressiv* 25 %) und kauft mit dem Erlös die stärkste neue Aktie. So kommt nach dem Wechsel auf 4 Positionen die vierte Aktie dazu, sobald die Börse öffnet und ein Kaufsignal da ist.
+
 ## 0.8.0
 - Strategie *aggressiv*: 4 Aktien zu je 25 % statt 3 zu je 34 % (breitere Streuung, im Backtest gleiche Rendite). Bestehende Positionen bleiben, die vierte kommt beim nächsten Kauf dazu.
 

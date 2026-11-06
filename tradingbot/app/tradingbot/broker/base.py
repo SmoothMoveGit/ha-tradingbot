@@ -69,6 +69,10 @@ class Broker(ABC):
     @abstractmethod
     def sell_all(self, symbol: str) -> Fill | None: ...
 
+    def sell_qty(self, symbol: str, qty: float) -> Fill | None:
+        """Teilverkauf. Broker ohne Teilverkauf geben None zurück."""
+        return None
+
     def fetch_news(self, symbols: list[str], since: datetime, limit: int = 500) -> list[dict]:
         return []
 

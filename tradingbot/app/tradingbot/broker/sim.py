@@ -63,6 +63,18 @@ class SimBroker(Broker):
         self.cash -= amount
         return Fill(symbol, "buy", qty, price)
 
+    def sell_qty(self, symbol: str, qty: float) -> Fill | None:
+        if symbol not in self.holdings or qty <= 0:
+            return None
+        held, avg = self.holdings[symbol]
+        qty = min(qty, held)
+        if held - qty < 1e-9:
+            return self.sell_all(symbol)
+        self.holdings[symbol] = (held - qty, avg)
+        price = self.last_price(symbol)
+        self.cash += qty * price
+        return Fill(symbol, "sell", qty, price)
+
     def sell_all(self, symbol: str) -> Fill | None:
         if symbol not in self.holdings:
             return None

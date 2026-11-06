@@ -565,3 +565,27 @@ def test_daytrader_moves_stop_to_breakeven():
     DayTrader(DayConfig(watchlist=["AAA"], breakeven_r=1.0), b, st).cycle(now)
     plan = _json.loads(st.get("plan:AAA"))
     assert plan["stop"] == 100.0 and plan["be"] and b.stops == [100.0]
+
+
+def test_make_room_for_new_position_after_switch_to_four():
+    bot, broker = make_bot(("AAA", "BBB", "CCC", "DDD"), budget=1000.0)
+    r = bot.cfg.risk
+    r.max_positions, r.max_position_pct, r.min_cash_reserve_pct = 3, 0.34, 0.0
+    for i in range(40):  # DDD erst ohne Trend
+        broker.set_price("DDD", 100 - i * 0.5)
+    bot.run_cycle()
+    assert set(bot.storage.all_meta()) == {"AAA", "BBB", "CCC"}
+    assert broker.cash < r.min_order_value
+    r.max_positions, r.max_position_pct = 4, 0.25
+    for i in range(60):  # jetzt Aufwärtstrend bei DDD
+        broker.set_price("DDD", 80 + i)
+    bot.run_cycle()
+    meta = bot.storage.all_meta()
+    assert set(meta) == {"AAA", "BBB", "CCC", "DDD"}
+    for sym in ("AAA", "BBB", "CCC"):
+        assert broker.positions()[sym].market_value == pytest.approx(250, abs=2)
+    assert meta["DDD"] == pytest.approx(250, abs=5)
+    reasons = [t[6] for t in bot.storage.recent_trades(10)]
+    assert sum("Umschichten" in x for x in reasons) == 3
+    bot.run_cycle()  # danach kein weiteres Umschichten
+    assert sum("Umschichten" in t[6] for t in bot.storage.recent_trades(20)) == 3

@@ -97,6 +97,36 @@ class TradingBot:
             log.info("NACHKAUF %s %.4f @ %.2f (%.2f) | %s", sym, fill.qty, fill.price, cost, reason)
             self.reporter.notify(f"Tradingbot: {sym} nachgekauft", f"{cost:.2f} $ zu {fill.price:.2f} $")
 
+    def _make_room(self, candidates: list, positions: dict, meta: dict, soon: dict) -> None:
+        """Fehlt Bargeld für eine weitere Position, werden zu große Positionen auf Zielgröße gekürzt.
+
+        Nötig z. B. nach dem Wechsel von 3 auf 4 Positionen: sonst blockieren die alten das ganze Geld.
+        """
+        r, st = self.cfg.risk, self.cfg.strategy
+        if len(meta) >= r.max_positions or self.risk.position_size(sum(meta.values()), self.broker.account().cash):
+            return
+        if not any(s.symbol not in soon and self.news.latest_shock(s.symbol) > st.panic_news_threshold
+                   for s in candidates):
+            return
+        target = self.risk.bot_capital() * r.max_position_pct
+        for sym, pos in sorted(positions.items(), key=lambda kv: -kv[1].market_value):
+            excess = pos.market_value - target
+            if sym not in meta or excess < r.min_order_value:
+                continue
+            fill = self.broker.sell_qty(sym, pos.qty * excess / pos.market_value)
+            held = self.broker.positions().get(sym)
+            if fill:
+                frac = min(1.0, fill.qty / pos.qty)
+                pnl = fill.qty * fill.price - meta[sym] * frac
+                self.storage.reduce_meta(sym, frac)
+                meta[sym] = self.storage.all_meta()[sym]
+                reason = f"Umschichten auf {r.max_positions} Positionen"
+                self.storage.record_trade(sym, "sell", fill.qty, fill.price, reason, pnl)
+                log.info("TEILVERKAUF %s %.4f @ %.2f | %s | G/V %+.2f", sym, fill.qty, fill.price, reason, pnl)
+                self.reporter.notify(f"Tradingbot: {sym} gekürzt", f"{fill.qty * fill.price:.2f} $ frei für eine weitere Aktie")
+            if held:  # Stop wurde für den Verkauf entfernt: mit neuer Stückzahl wieder setzen
+                self._broker_stop(held, self.storage.update_high(sym, held.current_price))
+
     def _sell(self, symbol: str, reason: str, meta: dict, today: date) -> None:
         fill = self.broker.sell_all(symbol)
         if fill:
@@ -302,6 +332,8 @@ class TradingBot:
             )
             soon = self.earnings.upcoming(self.cfg.watchlist, today, self.cfg.news.earnings_guard_days) \
                 if self.earnings and candidates else {}
+            if candidates:
+                self._make_room(candidates, positions, meta, soon)
             for sig in candidates:
                 if len(meta) >= self.cfg.risk.max_positions:
                     break
