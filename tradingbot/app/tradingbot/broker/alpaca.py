@@ -116,7 +116,12 @@ class AlpacaBroker(Broker):
                 self.trading.cancel_order_by_id(o.id)
             except APIError as e:
                 log.warning("Order %s für %s nicht stornierbar: %s", o.id, symbol, e)
-        time.sleep(1)  # Alpaca gibt die Stückzahl erst nach der Stornierung frei
+        # Alpaca gibt die Stückzahl erst frei, wenn die Stornierung durch ist (dauert manchmal mehrere Sekunden)
+        for _ in range(10):
+            time.sleep(1)
+            if not self._open_orders(symbol):
+                return
+        log.warning("Offene Orders für %s nach 10 s noch nicht storniert", symbol)
 
     def ensure_stop(self, symbol: str, qty: float, stop_price: float) -> None:
         """Hält genau eine Stop-Order beim Broker aktuell. Gültig bis Handelsschluss, wird täglich erneuert."""

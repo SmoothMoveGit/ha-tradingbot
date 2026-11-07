@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.4
+- Verkauf wartet, bis Alpaca offene Stop-Orders wirklich storniert hat (bis zu 10 s). Vorher scheiterten Verkäufe manchmal mit "insufficient qty available".
+
 ## 0.8.3
 - Neue Nachrichtenquelle: SEC-Pflichtmeldungen (8-K). Insolvenz, Delisting-Warnung oder unzuverlässige frühere Zahlen führen zum sofortigen Verkauf und 30 Tagen Kaufsperre; Cyberangriff, Abschreibung und Vorstandswechsel gehen in die Nachrichtenbewertung. Neue Option *SEC-Kontakt* (Name und E-Mail, verlangt die SEC), leer = aus.
 
