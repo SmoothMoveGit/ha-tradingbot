@@ -52,6 +52,7 @@ class DayConfig:
     breakeven_r: float = 0.0            # >0: Stop auf Einstand, sobald der Kurs so viele R im Plus ist
     time_stop_min: int = 0              # >0: nach so vielen Minuten raus, wenn der Trade nicht mind. time_stop_r im Plus ist
     time_stop_r: float = 0.5
+    daily_setup: str = ""               # Vorauswahl nach Tageskerzen (Skill-Scanner): breakout20 | flag | any
     trend_ma: int = 0                   # >0: nur Aktien, deren Vortagesschluss über dem N-Tage-Schnitt liegt
     # Opening-Range-Breakout (aus dem day-trader-skill): Spanne der ersten 15 min, Schluss einer
     # 5-min-Kerze darüber = Einstieg, Stop Mitte der Spanne, Ziel reward_risk x Risiko
@@ -225,6 +226,25 @@ def pullback_setup(bars: list[Bar], cfg: DayConfig, stats: dict | None = None) -
             "why": f"Pullback RSI {r:.0f}, Vol {c.volume / (sum(vols) / len(vols)):.1f}x" if vols else "Pullback"}
 
 
+def daily_setup_ok(closes: list[float], kind: str) -> bool:
+    """Tagesmuster aus dem Skill-Scanner (nur Schlusskurse, abgeschlossene Tage):
+    breakout20 = letzter Schluss über allen 20 davor; flag = +10 % in 10 Tagen, dann 5 Tage in 5 %-Spanne;
+    any = eins davon oder Rückkehr über den 20-Tage-Schnitt."""
+    if len(closes) < 21:
+        return True  # ohne Daten nicht sperren
+    last = closes[-1]
+    breakout = last > max(closes[-21:-1])
+    flag = len(closes) >= 15 and closes[-6] / closes[-16 if len(closes) >= 16 else 0] - 1 > 0.10 and \
+        max(closes[-5:]) / min(closes[-5:]) - 1 <= 0.05
+    ma_prev, ma_now = sum(closes[-21:-1]) / 20, sum(closes[-20:]) / 20
+    reclaim = closes[-2] < ma_prev and last > ma_now
+    if kind == "breakout20":
+        return breakout
+    if kind == "flag":
+        return flag
+    return breakout or flag or reclaim
+
+
 def orb_setup(bars5: list[Bar], cfg: DayConfig, now: datetime, stats: dict | None = None) -> dict | None:
     """Opening-Range-Breakout auf 5-Minuten-Kerzen (Regel aus dem day-trader-skill, trader-entry/-exit):
     Spanne = erste orb_minutes, Auslöser = erste fertige Kerze danach, die ÜBER dem Spannenhoch schließt.
@@ -274,7 +294,10 @@ def breakout_setup(bars: list[Bar], cfg: DayConfig) -> dict | None:
 
 
 class DayTrader:
-    def __init__(self, cfg: DayConfig, broker, storage: Storage, reporter: Reporter | None = None, earnings=None):
+    def __init__(self, cfg: DayConfig, broker, storage: Storage, reporter: Reporter | None = None, earnings=None,
+                 sec=None):
+        self.sec = sec  # SEC-8-K-Meldungen (live): betroffene Aktie an diesem Tag nicht kaufen
+        self._sec_today: dict[str, str] = {}
         self.cfg = cfg
         self.broker = broker
         self.storage = storage
@@ -299,6 +322,37 @@ class DayTrader:
                 closes = []
             self._trend[key] = len(closes) < n or closes[-1] > sum(closes) / n  # ohne Daten nicht sperren
         return self._trend[key]
+
+    def _daily_ok(self, sym: str, today: date) -> bool:
+        key = (sym + ":setup", today)
+        if key not in self._trend:
+            try:
+                closes = [b.close for b in self.broker.daily_bars(sym, 30) if session_of(b) < today]
+            except Exception:
+                closes = []
+            self._trend[key] = daily_setup_ok(closes, self.cfg.daily_setup)
+        return self._trend[key]
+
+    def _check_sec(self, now: datetime) -> None:
+        """Wichtige 8-K-Meldungen von heute: Aktie heute nicht kaufen; schwere Meldung = 30 Tage Sperre."""
+        from . import sec as secmod
+        today = now.date()
+        if self._sec_today.get("_day") != str(today):
+            self._sec_today = {"_day": str(today)}
+        try:
+            start = datetime(today.year, today.month, today.day, tzinfo=NY)
+            for f in self.sec.fetch(self.cfg.watchlist, start, now):
+                sym = f["symbols"][0]
+                if sym not in self._sec_today:
+                    self.log.info("DAYTRADER-SEC %s: %s, heute kein Kauf", sym, f["label"])
+                self._sec_today[sym] = f["label"]
+                if f.get("hard"):
+                    secmod.block(self.storage, sym, f["label"], today)
+        except Exception as e:
+            self.log.warning("SEC-Abfrage fehlgeschlagen: %s", e)
+        for sym in self.cfg.watchlist:
+            if sym not in self._sec_today and (label := secmod.blocked(self.storage, sym, today)):
+                self._sec_today[sym] = label
 
     def capital(self) -> float:
         return self.cfg.start_budget + self.storage.realized_pnl()
@@ -398,6 +452,9 @@ class DayTrader:
         soon = {}
         if self.earnings and c.strategy != "breakout":
             soon = self.earnings.upcoming(c.watchlist, today, c.earnings_guard_days)
+        if self.sec:
+            self._check_sec(now)
+            soon = {**soon, **{k: v for k, v in self._sec_today.items() if k != "_day"}}
         for sym in c.watchlist:
             bars5 = raw.get(sym, [])
             if not bars5 or sym in meta or sym in soon:
@@ -407,6 +464,11 @@ class DayTrader:
                 if self._seen.get(sym + ":trend") != today:
                     counter["unter Tages-Schnitt"] = counter.get("unter Tages-Schnitt", 0) + 1
                     self._seen[sym + ":trend"] = today
+                continue
+            if c.daily_setup and c.strategy != "breakout" and not self._daily_ok(sym, today):
+                if self._seen.get(sym + ":setup") != today:
+                    counter["kein Tagesmuster"] = counter.get("kein Tagesmuster", 0) + 1
+                    self._seen[sym + ":setup"] = today
                 continue
             bars = aggregate(bars5, c.bar_minutes, now)
             plan = None

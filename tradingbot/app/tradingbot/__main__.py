@@ -98,11 +98,11 @@ def daytrade(cfg) -> int:
     from .daytrader import EXTRA_SYMBOLS, LOOSE, MORE_SYMBOLS, DayTrader, backtest as day_backtest, config_from_env
     from .earnings import EarningsCalendar
     from .homeassistant import HomeAssistantReporter
-    # Seit 0.7.9: gelockertes Regelwerk auf 40 Werten, Ziel 1,5R, Einstand-Stop ab 1R
-    # (bester Wert im 40-Tage-Vergleich vom 05.11.: +2,5 % bei 89 Trades; Michi hat Anpassungen freigegeben)
+    # Seit 0.8.6: gelockertes Regelwerk auf 40 Werten, Ziel 1,5R, Einstand-Stop ab 1R, keine Käufe in den letzten
+    # 150 min (40-Tage-Vergleich vom 09.11.: +2,5 % bei 76 Trades statt +2,1 % bei 89; späte Käufe verloren live)
     wide = list(dict.fromkeys(cfg.watchlist + EXTRA_SYMBOLS))
     wider = list(dict.fromkeys(wide + MORE_SYMBOLS))
-    exit_b = {"reward_risk": 1.5, "breakeven_r": 1.0}
+    exit_b = {"reward_risk": 1.5, "breakeven_r": 1.0, "no_entry_last_min": 150}
     dcfg = config_from_env(wider, **LOOSE, **exit_b)
     broker = AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)  # Daytrader nie mit echtem Geld
     log = logging.getLogger("tradingbot.daytrader")
@@ -110,14 +110,14 @@ def daytrade(cfg) -> int:
         try:
             bars = broker.intraday_bars(wider, days=90)  # ~60 Handelstage: 40 Testtage + Vorlauf für den 20-Tage-Schnitt
             base = {**LOOSE, "watchlist": wider, **exit_b}
-            # 0.8.5: späte Einstiege und Trades ohne Fortschritt (Befund aus der ersten Live-Woche)
+            # 0.8.6: Trades pro Tag und Tagesmuster aus dem Skill-Scanner als Vorauswahl
             variants = [
-                ("locker 40, Ziel 1,5R + Einstand (aktiv)", base),
-                ("keine Käufe in den letzten 90 min", {**base, "no_entry_last_min": 90}),
-                ("keine Käufe in den letzten 150 min", {**base, "no_entry_last_min": 150}),
-                ("Zeitstop 2 h ohne +0,5R", {**base, "time_stop_min": 120}),
-                ("Zeitstop 1 h ohne +0,5R", {**base, "time_stop_min": 60}),
-                ("90 min + Zeitstop 2 h", {**base, "no_entry_last_min": 90, "time_stop_min": 120}),
+                ("aktiv: keine Käufe in den letzten 150 min", base),
+                ("bis 0.8.5 (Käufe bis 45 min vor Schluss)", {**base, "no_entry_last_min": 45}),
+                ("5 Trades pro Tag", {**base, "max_trades_per_day": 5}),
+                ("ohne Trade-Grenze", {**base, "max_trades_per_day": 99}),
+                ("Vorauswahl Tagesmuster (20-Tage-Hoch, Flagge, über 20-Tage-Schnitt)", {**base, "daily_setup": "any"}),
+                ("Vorauswahl nur 20-Tage-Hoch", {**base, "daily_setup": "breakout20"}),
             ]
             for name, over in variants:
                 over = dict(over)
@@ -136,7 +136,10 @@ def daytrade(cfg) -> int:
     # Vergleich im Hintergrund, damit der Daytrader sofort handelt (dauert auf dem Pi einige Minuten)
     threading.Thread(target=compare, name="daytrader-backtest", daemon=True).start()
     storage = Storage(cfg.db_path)
-    DayTrader(dcfg, broker, storage, HomeAssistantReporter.from_env(), EarningsCalendar(storage)).run_forever()
+    from . import sec as secmod
+    ua = cfg.news.sec_user_agent
+    filings = secmod.SecFilings(ua, storage) if secmod.valid_user_agent(ua) else None
+    DayTrader(dcfg, broker, storage, HomeAssistantReporter.from_env(), EarningsCalendar(storage), filings).run_forever()
     return 0
 
 

@@ -633,6 +633,46 @@ def test_daytrader_time_stop_sells_trade_without_progress():
     assert run(61) == ["AAA"]     # nach 1 h nur +0,2R: raus
 
 
+def test_daytrader_daily_setups_from_skill_scanner():
+    from tradingbot.daytrader import daily_setup_ok
+    flat = [100.0] * 25
+    assert daily_setup_ok(flat[:10], "breakout20")            # zu wenig Daten: nicht sperren
+    assert not daily_setup_ok(flat, "breakout20")
+    assert daily_setup_ok(flat[:-1] + [101.0], "breakout20")
+    flag = [100.0] * 10 + [100 + 1.5 * i for i in range(1, 11)] + [115, 116, 115.5, 116, 115.8]
+    assert daily_setup_ok(flag, "flag") and not daily_setup_ok(flat, "flag")
+    reclaim = [100.0] * 20 + [97, 96, 95, 94, 101]
+    assert daily_setup_ok(reclaim, "any") and not daily_setup_ok(flat, "any")
+
+
+def test_daytrader_skips_symbol_with_sec_filing_today():
+    from tradingbot.daytrader import DayConfig, DayTrader
+    from tradingbot.storage import Storage
+    from zoneinfo import ZoneInfo
+
+    class Sec:
+        def fetch(self, symbols, since, now):
+            return [{"symbols": ["AAA"], "label": "Delisting-Warnung", "hard": True}]
+
+    class B:
+        def __init__(self): self.asked = None
+        def market_open(self): return True
+        def positions(self): return {}
+        def minutes_to_close(self, now): return 200
+        def intraday_bars(self, symbols, now, days=0):
+            return {}
+        def account(self):
+            from tradingbot.broker.base import Account
+            return Account(1000, 1000, 1000)
+
+    st = Storage(":memory:")
+    bot = DayTrader(DayConfig(watchlist=["AAA", "BBB"]), B(), st, sec=Sec())
+    bot.cycle(datetime(2026, 11, 9, 11, 0, tzinfo=ZoneInfo("America/New_York")))
+    assert bot._sec_today.get("AAA") == "Delisting-Warnung" and "BBB" not in bot._sec_today
+    from tradingbot import sec as secmod
+    assert secmod.blocked(st, "AAA", date(2026, 11, 20)) == "Delisting-Warnung"  # 30 Tage Sperre
+
+
 def test_make_room_for_new_position_after_switch_to_four():
     bot, broker = make_bot(("AAA", "BBB", "CCC", "DDD"), budget=1000.0)
     r = bot.cfg.risk
