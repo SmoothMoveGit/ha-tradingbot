@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.6
+- Daytrader kauft nicht mehr in den letzten 150 Minuten vor Börsenschluss (40-Tage-Backtest: +2,5 % bei 76 Trades statt +2,1 % bei 89). Späte Käufe hatten kaum Zeit bis zum Ziel und wurden zum Handelsschluss mit Verlust verkauft. Der Zeitstop hat im Backtest geschadet (−1,4 % bzw. −2,1 %) und bleibt aus.
+- Daytrader nutzt die SEC-Meldungen (8-K): Aktie mit wichtiger Meldung am selben Tag wird nicht gekauft, bei schwerer Meldung (Insolvenz, Delisting-Warnung, unzuverlässige Zahlen) 30 Tage nicht. Nutzt die Option sec_user_agent.
+- Backtest-Vergleich beim Start: 5 Trades pro Tag, ohne Trade-Grenze und Vorauswahl nach Tagesmustern aus dem day-trader-skill (20-Tage-Hoch, Flagge, Rückkehr über den 20-Tage-Schnitt).
+
 ## 0.8.5
 - Daytrader: neuer Zeitstop (raus, wenn ein Trade nach X Minuten nicht mindestens +0,5R im Plus ist), zunächst nur im Backtest. Der Varianten-Backtest beim Start vergleicht jetzt späte Einstiege (keine Käufe in den letzten 90 bzw. 150 min) und Zeitstops von 1 h und 2 h mit den aktiven Regeln. Anlass: In der ersten Live-Woche wurden späte Käufe zum Handelsschluss mit Verlust verkauft.
 
