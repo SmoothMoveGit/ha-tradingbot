@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.7
+- Daytrader darf bis zu 5 statt 3 Trades pro Tag machen. Im 40-Tage-Backtest ändert das kaum etwas (+2,5 % bei 78 statt 76 Trades), weil die Grenze selten erreicht wird. Die Vorauswahl nach Tagesmustern aus dem day-trader-skill bleibt aus: zu wenige Trades (14 bzw. 20) und weniger Gewinn (+0,9 % bzw. +1,4 %).
+
 ## 0.8.6
 - Daytrader kauft nicht mehr in den letzten 150 Minuten vor Börsenschluss (40-Tage-Backtest: +2,5 % bei 76 Trades statt +2,1 % bei 89). Späte Käufe hatten kaum Zeit bis zum Ziel und wurden zum Handelsschluss mit Verlust verkauft. Der Zeitstop hat im Backtest geschadet (−1,4 % bzw. −2,1 %) und bleibt aus.
 - Daytrader nutzt die SEC-Meldungen (8-K): Aktie mit wichtiger Meldung am selben Tag wird nicht gekauft, bei schwerer Meldung (Insolvenz, Delisting-Warnung, unzuverlässige Zahlen) 30 Tage nicht. Nutzt die Option sec_user_agent.

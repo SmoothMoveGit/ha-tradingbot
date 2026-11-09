@@ -99,10 +99,11 @@ def daytrade(cfg) -> int:
     from .earnings import EarningsCalendar
     from .homeassistant import HomeAssistantReporter
     # Seit 0.8.6: gelockertes Regelwerk auf 40 Werten, Ziel 1,5R, Einstand-Stop ab 1R, keine Käufe in den letzten
-    # 150 min (40-Tage-Vergleich vom 09.11.: +2,5 % bei 76 Trades statt +2,1 % bei 89; späte Käufe verloren live)
+    # 150 min (40-Tage-Vergleich vom 09.11.: +2,5 % bei 76 Trades statt +2,1 % bei 89; späte Käufe verloren live),
+    # seit 0.8.7 bis zu 5 Trades pro Tag (im Test gleiches Ergebnis, Michi wünscht mehr Spielraum)
     wide = list(dict.fromkeys(cfg.watchlist + EXTRA_SYMBOLS))
     wider = list(dict.fromkeys(wide + MORE_SYMBOLS))
-    exit_b = {"reward_risk": 1.5, "breakeven_r": 1.0, "no_entry_last_min": 150}
+    exit_b = {"reward_risk": 1.5, "breakeven_r": 1.0, "no_entry_last_min": 150, "max_trades_per_day": 5}
     dcfg = config_from_env(wider, **LOOSE, **exit_b)
     broker = AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)  # Daytrader nie mit echtem Geld
     log = logging.getLogger("tradingbot.daytrader")
@@ -112,9 +113,9 @@ def daytrade(cfg) -> int:
             base = {**LOOSE, "watchlist": wider, **exit_b}
             # 0.8.6: Trades pro Tag und Tagesmuster aus dem Skill-Scanner als Vorauswahl
             variants = [
-                ("aktiv: keine Käufe in den letzten 150 min", base),
+                ("aktiv: keine Käufe in den letzten 150 min, 5 Trades/Tag", base),
                 ("bis 0.8.5 (Käufe bis 45 min vor Schluss)", {**base, "no_entry_last_min": 45}),
-                ("5 Trades pro Tag", {**base, "max_trades_per_day": 5}),
+                ("3 Trades pro Tag (bis 0.8.6)", {**base, "max_trades_per_day": 3}),
                 ("ohne Trade-Grenze", {**base, "max_trades_per_day": 99}),
                 ("Vorauswahl Tagesmuster (20-Tage-Hoch, Flagge, über 20-Tage-Schnitt)", {**base, "daily_setup": "any"}),
                 ("Vorauswahl nur 20-Tage-Hoch", {**base, "daily_setup": "breakout20"}),
