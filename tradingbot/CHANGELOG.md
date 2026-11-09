@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.5
+- Daytrader: neuer Zeitstop (raus, wenn ein Trade nach X Minuten nicht mindestens +0,5R im Plus ist), zunächst nur im Backtest. Der Varianten-Backtest beim Start vergleicht jetzt späte Einstiege (keine Käufe in den letzten 90 bzw. 150 min) und Zeitstops von 1 h und 2 h mit den aktiven Regeln. Anlass: In der ersten Live-Woche wurden späte Käufe zum Handelsschluss mit Verlust verkauft.
+
 ## 0.8.4
 - Verkauf wartet, bis Alpaca offene Stop-Orders wirklich storniert hat (bis zu 10 s). Vorher scheiterten Verkäufe manchmal mit "insufficient qty available".
 

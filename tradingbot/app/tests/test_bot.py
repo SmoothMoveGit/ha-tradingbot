@@ -599,6 +599,40 @@ def test_daytrader_orb_backtest_and_trend_filter():
     assert res["trades"] == 0 and res["stats"].get("unter Tages-Schnitt") == 1
 
 
+def test_daytrader_time_stop_sells_trade_without_progress():
+    from tradingbot.daytrader import DayConfig, DayTrader
+    from tradingbot.broker.base import Fill, Position
+    from tradingbot.storage import Storage
+    from zoneinfo import ZoneInfo
+    import json as _json
+
+    class B:
+        def __init__(self): self.sold = []
+        def market_open(self): return True
+        def positions(self): return {"AAA": Position("AAA", 1.0, 100.0, 100.2)}
+        def minutes_to_close(self, now): return 200
+        def ensure_stop(self, *a): pass
+        def sell_all(self, sym):
+            self.sold.append(sym)
+            return Fill(sym, "sell", 1.0, 100.2)
+        def intraday_bars(self, *a, **k): return {}
+        def account(self):
+            from tradingbot.broker.base import Account
+            return Account(0, 0, 0)
+
+    ny = ZoneInfo("America/New_York")
+    t0 = datetime(2026, 11, 9, 11, 0, tzinfo=ny)
+    def run(minutes):
+        st = Storage(":memory:")
+        st.open_meta("AAA", 100.0, 100.0, when=t0)
+        st.set("plan:AAA", _json.dumps({"stop": 99.0, "target": 101.5, "entry": 100.0, "t": t0.isoformat(), "risk": 1.0}))
+        b = B()
+        DayTrader(DayConfig(watchlist=["AAA"], time_stop_min=60), b, st).cycle(t0 + timedelta(minutes=minutes))
+        return b.sold
+    assert run(30) == []          # noch Zeit
+    assert run(61) == ["AAA"]     # nach 1 h nur +0,2R: raus
+
+
 def test_make_room_for_new_position_after_switch_to_four():
     bot, broker = make_bot(("AAA", "BBB", "CCC", "DDD"), budget=1000.0)
     r = bot.cfg.risk

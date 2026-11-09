@@ -110,14 +110,14 @@ def daytrade(cfg) -> int:
         try:
             bars = broker.intraday_bars(wider, days=90)  # ~60 Handelstage: 40 Testtage + Vorlauf für den 20-Tage-Schnitt
             base = {**LOOSE, "watchlist": wider, **exit_b}
-            # Ideen aus dem day-trader-skill (0.8.2): Opening-Range-Breakout und Tagesfilter über dem 20-Tage-Schnitt
+            # 0.8.5: späte Einstiege und Trades ohne Fortschritt (Befund aus der ersten Live-Woche)
             variants = [
                 ("locker 40, Ziel 1,5R + Einstand (aktiv)", base),
-                ("aktiv + Tagesfilter 20-Tage-Schnitt", {**base, "trend_ma": 20}),
-                ("ORB 40, Ziel 1,5R + Einstand", {**base, "strategy": "orb"}),
-                ("ORB 40, Ziel 2R (Skill-Standard)", {**base, "strategy": "orb", "reward_risk": 2.0, "breakeven_r": 0.0}),
-                ("Pullback + ORB kombiniert", {**base, "strategy": "combo"}),
-                ("Pullback + ORB + Tagesfilter", {**base, "strategy": "combo", "trend_ma": 20}),
+                ("keine Käufe in den letzten 90 min", {**base, "no_entry_last_min": 90}),
+                ("keine Käufe in den letzten 150 min", {**base, "no_entry_last_min": 150}),
+                ("Zeitstop 2 h ohne +0,5R", {**base, "time_stop_min": 120}),
+                ("Zeitstop 1 h ohne +0,5R", {**base, "time_stop_min": 60}),
+                ("90 min + Zeitstop 2 h", {**base, "no_entry_last_min": 90, "time_stop_min": 120}),
             ]
             for name, over in variants:
                 over = dict(over)

@@ -50,6 +50,8 @@ class DayConfig:
     resistance_filter: bool = True
     entry_valid_bars: int = 1           # so viele Kerzen bleibt der Einstieg gültig
     breakeven_r: float = 0.0            # >0: Stop auf Einstand, sobald der Kurs so viele R im Plus ist
+    time_stop_min: int = 0              # >0: nach so vielen Minuten raus, wenn der Trade nicht mind. time_stop_r im Plus ist
+    time_stop_r: float = 0.5
     trend_ma: int = 0                   # >0: nur Aktien, deren Vortagesschluss über dem N-Tage-Schnitt liegt
     # Opening-Range-Breakout (aus dem day-trader-skill): Spanne der ersten 15 min, Schluss einer
     # 5-min-Kerze darüber = Einstieg, Stop Mitte der Spanne, Ziel reward_risk x Risiko
@@ -366,6 +368,9 @@ class DayTrader:
                 self._sell(sym, ("Einstand-Stop" if plan.get("be") else "Stop-Loss") + f" {pos.pnl_pct:+.1%}", meta, now)
             elif pos.current_price >= plan["target"]:
                 self._sell(sym, f"Kursziel {pos.pnl_pct:+.1%}", meta, now)
+            elif c.time_stop_min and "t" in plan and now - datetime.fromisoformat(plan["t"]) >= timedelta(minutes=c.time_stop_min) \
+                    and pos.current_price < plan["entry"] + c.time_stop_r * plan["risk"]:
+                self._sell(sym, f"Zeitstop {pos.pnl_pct:+.1%}", meta, now)  # kein Fortschritt: Platz und Risiko freigeben
             elif c.breakeven_r > 0 and not plan.get("be") and "entry" in plan and \
                     pos.current_price >= plan["entry"] + c.breakeven_r * (plan["entry"] - plan["stop"]):
                 plan.update(stop=plan["entry"], be=True)  # ab jetzt kein Verlust mehr möglich (bis auf Spanne)
@@ -449,7 +454,8 @@ class DayTrader:
             self.storage.open_meta(sym, cost, fill.price, when=now)
             meta[sym] = cost
             self.storage.set(f"plan:{sym}", json.dumps({"stop": plan["stop"], "target": plan["target"],
-                                                        "entry": fill.price}))
+                                                        "entry": fill.price, "t": now.isoformat(),
+                                                        "risk": max(fill.price - plan["stop"], 1e-9)}))
             d["entries"] += 1
             self._save_day(today, d)
             reason = f"{plan['why']}, Stop {plan['stop']:.2f}, Ziel {plan['target']:.2f}"
