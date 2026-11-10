@@ -100,6 +100,8 @@ class NewsAnalyzer:
         log.info("Nachrichtenbewertung: %s", "Claude (" + self.engine.model + ")" if self.engine.engine == "claude" else "Lexikon")
         ua = cfg.news.sec_user_agent
         self.sec = sec.SecFilings(ua, storage) if sec.valid_user_agent(ua) else None
+        if self.sec:
+            log.info("SEC-Pflichtmeldungen (8-K) aktiv, Abruf alle %d min", sec.FETCH_EVERY.seconds // 60)
         if ua and not self.sec:
             log.warning("SEC-User-Agent braucht Name und E-Mail, SEC-Meldungen sind aus")
 

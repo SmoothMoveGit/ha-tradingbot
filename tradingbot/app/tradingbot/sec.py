@@ -115,15 +115,18 @@ class SecFilings:
         except Exception as e:
             log.warning("SEC-Firmenliste nicht abrufbar: %s", e)
             return []
-        out, failed = [], []
+        out, failed, checked = [], [], 0
         for sym in symbols:
             cik = ciks.get(sym)
             if not cik:
                 continue
             try:
                 out += [f for f in parse_atom(self._get(FEED_URL.format(cik=cik)), sym) if f["time"] >= since]
-            except Exception:
-                failed.append(sym)
+                checked += 1
+            except Exception as e:
+                failed.append(f"{sym} ({e})")
+        log.info("SEC: %d Firmen geprüft, %d wichtige 8-K-Meldungen%s", checked, len(out),
+                 f" ({', '.join(f['symbols'][0] + ': ' + f['label'] for f in out)})" if out else "")
         if failed:
             log.warning("SEC-Meldungen nicht abrufbar für %s", ", ".join(failed))
         return out

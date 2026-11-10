@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.8
+- SEC-Meldungen sichtbar im Log: Startzeile, wenn die Quelle aktiv ist, und pro Abruf (alle 30 min) „SEC: x Firmen geprüft, y wichtige 8-K-Meldungen“.
+
 ## 0.8.7
 - Daytrader darf bis zu 5 statt 3 Trades pro Tag machen. Im 40-Tage-Backtest ändert das kaum etwas (+2,5 % bei 78 statt 76 Trades), weil die Grenze selten erreicht wird. Die Vorauswahl nach Tagesmustern aus dem day-trader-skill bleibt aus: zu wenige Trades (14 bzw. 20) und weniger Gewinn (+0,9 % bzw. +1,4 %).
 
