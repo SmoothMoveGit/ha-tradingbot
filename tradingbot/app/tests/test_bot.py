@@ -673,6 +673,26 @@ def test_daytrader_skips_symbol_with_sec_filing_today():
     assert secmod.blocked(st, "AAA", date(2026, 11, 20)) == "Delisting-Warnung"  # 30 Tage Sperre
 
 
+def test_daytrader_extra_deposit_raises_capital_not_profit(monkeypatch):
+    from tradingbot.daytrader import DayTrader, config_from_env
+    from tradingbot.storage import Storage
+    monkeypatch.setenv("DAYTRADER_BUDGET", "1100")
+    monkeypatch.setenv("DAYTRADER_EXTRA_DEPOSIT", "230")
+    cfg = config_from_env(["AAA"])
+    sent = {}
+
+    class R:
+        def publish_daytrader(self, s): sent.update(s)
+
+    class B:
+        def positions(self): return {}
+
+    bot = DayTrader(cfg, B(), Storage(":memory:"), R())
+    assert bot.capital() == 1330
+    bot.publish()
+    assert sent["start_budget"] == 1330 and sent["value"] == 1330 and sent["realized_pnl"] == 0
+
+
 def test_make_room_for_new_position_after_switch_to_four():
     bot, broker = make_bot(("AAA", "BBB", "CCC", "DDD"), budget=1000.0)
     r = bot.cfg.risk

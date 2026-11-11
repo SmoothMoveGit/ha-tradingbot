@@ -25,6 +25,9 @@ configuration:
   day_budget:
     name: Daytrader Startbudget (USD)
     description: Spielgeld für den Daytrader. Leer = 1100.
+  day_extra_deposit:
+    name: Daytrader Sonderzahlungen gesamt (USD)
+    description: Summe aller Einmalzahlungen für den Daytrader. Erhöht das Kapital, zählt aber nicht als Gewinn.
   strategy:
     name: Strategie
     description: "standard = kurzer Trend, enge Stops. trendfolger = langer Trend 50/200, Stops 15 %. aggressiv = wie trendfolger, aber 4 große Positionen, keine Reserve, Not-Aus erst bei 50 % Verlust."

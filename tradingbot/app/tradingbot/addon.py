@@ -43,7 +43,8 @@ def main() -> int:
         import sys
         day_env = {**os.environ, "ALPACA_API_KEY": opts["day_alpaca_api_key"],
                    "ALPACA_SECRET_KEY": opts["day_alpaca_secret_key"], "TRADINGBOT_DB_PATH": "/data/daytrader.db",
-                   "TRADINGBOT_MODE": "paper", "DAYTRADER_BUDGET": str(opts.get("day_budget") or 1100)}
+                   "TRADINGBOT_MODE": "paper", "DAYTRADER_BUDGET": str(opts.get("day_budget") or 1100),
+                   "DAYTRADER_EXTRA_DEPOSIT": str(opts.get("day_extra_deposit") or 0)}
         subprocess.Popen([sys.executable, "-m", "tradingbot", "daytrade", "-c", str(CONFIG)], env=day_env)
         print("Daytrader (Vergleichs-Bot, nur Spielgeld) gestartet", flush=True)
 

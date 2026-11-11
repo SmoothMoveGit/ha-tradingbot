@@ -21,6 +21,9 @@ configuration:
     name: Day trader Alpaca secret key
   day_budget:
     name: Day trader start budget (USD)
+  day_extra_deposit:
+    name: Day trader one-off deposits total (USD)
+    description: Sum of all one-off deposits for the day trader. Raises the capital, not counted as profit.
   strategy:
     name: Strategy
     description: "standard = short trend, tight stops. trendfolger = long trend 50/200, 15 % stops. aggressiv = like trendfolger, but 4 large positions, no cash reserve, emergency stop at 50 % loss."

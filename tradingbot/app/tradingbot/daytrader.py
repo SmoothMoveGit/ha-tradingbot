@@ -30,6 +30,7 @@ NY = ZoneInfo("America/New_York")
 class DayConfig:
     watchlist: list
     start_budget: float = 1100.0
+    extra_deposit: float = 0.0          # Sonderzahlungen gesamt (USD): mehr Kapital, aber kein Gewinn
     strategy: str = "pullback"          # pullback (Regelwerk 15 min) | orb | combo (pullback + orb) | breakout (alt)
     # Pullback-Regelwerk
     bar_minutes: int = 15
@@ -355,7 +356,7 @@ class DayTrader:
                 self._sec_today[sym] = label
 
     def capital(self) -> float:
-        return self.cfg.start_budget + self.storage.realized_pnl()
+        return self.cfg.start_budget + self.cfg.extra_deposit + self.storage.realized_pnl()
 
     def _day(self, today: date) -> dict:
         return json.loads(self.storage.get(f"day:{today}", '{"entries": 0, "losses_in_row": 0, "pnl": 0.0}'))
@@ -536,7 +537,8 @@ class DayTrader:
                 for t, sym, side, qty, price, pnl, reason in self.storage.recent_trades(10)
             ]
             self.reporter.publish_daytrader({
-                "value": value, "capital": self.capital(), "start_budget": self.cfg.start_budget,
+                "value": value, "capital": self.capital(), "start_budget": self.cfg.start_budget + self.cfg.extra_deposit,
+                "deposits": self.cfg.extra_deposit,
                 "realized_pnl": self.storage.realized_pnl(), "positions": sorted(meta),
                 "status": self.status, "trade_count": self.storage.trade_count(), "trades": trades,
             })
@@ -544,8 +546,8 @@ class DayTrader:
             self.log.exception("Daytrader-Status konnte nicht gemeldet werden")
 
     def run_forever(self) -> None:
-        self.log.info("Daytrader gestartet (%s), Startbudget %.2f $, Intervall %d min",
-                 self.cfg.strategy, self.cfg.start_budget, self.cfg.interval_minutes)
+        self.log.info("Daytrader gestartet (%s), Startbudget %.2f $ + Sonderzahlungen %.2f $, Kapital %.2f $, Intervall %d min",
+                 self.cfg.strategy, self.cfg.start_budget, self.cfg.extra_deposit, self.capital(), self.cfg.interval_minutes)
         while True:
             try:
                 self.cycle()
@@ -642,6 +644,8 @@ class IntradaySim:
 def backtest(cfg: DayConfig, bars: dict[str, list[Bar]], test_days: int | None = None) -> dict:
     """Regeln über historische 5-Minuten-Kerzen, alle 5 min ein Zyklus. Die ersten Tage dienen nur
     zum Einlaufen der Indikatoren, wenn test_days gesetzt ist."""
+    from dataclasses import replace
+    cfg = replace(cfg, extra_deposit=0.0)  # Backtest immer mit dem Startbudget
     sim = IntradaySim(bars, cfg.start_budget)
     bot = DayTrader(cfg, sim, Storage(":memory:"))
     bot.stats = {}
@@ -672,7 +676,8 @@ def backtest(cfg: DayConfig, bars: dict[str, list[Bar]], test_days: int | None =
 
 
 def config_from_env(watchlist: list, **overrides) -> DayConfig:
-    cfg = DayConfig(watchlist=watchlist, start_budget=float(os.getenv("DAYTRADER_BUDGET") or 1100))
+    cfg = DayConfig(watchlist=watchlist, start_budget=float(os.getenv("DAYTRADER_BUDGET") or 1100),
+                    extra_deposit=float(os.getenv("DAYTRADER_EXTRA_DEPOSIT") or 0))
     for k, v in overrides.items():
         setattr(cfg, k, v)
     return cfg

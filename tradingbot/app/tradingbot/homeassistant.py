@@ -98,7 +98,7 @@ class HomeAssistantReporter(Reporter):
     def publish_daytrader(self, s: dict) -> None:
         money = {"unit_of_measurement": "USD", "device_class": "monetary", "state_class": "total"}
         self._state("sensor.daytrader_wert", round(s["value"], 2), friendly_name="Daytrader Wert",
-                    icon="mdi:lightning-bolt", startbudget=s["start_budget"],
+                    icon="mdi:lightning-bolt", startbudget=s["start_budget"], sonderzahlungen=s.get("deposits", 0.0),
                     rendite_prozent=round((s["value"] / s["start_budget"] - 1) * 100, 2), **money)
         self._state("sensor.daytrader_gewinn", round(s["realized_pnl"], 2),
                     friendly_name="Daytrader realisierter Gewinn", icon="mdi:cash-plus", **money)
