@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.10
+- Nachkauf: Sind alle Plätze belegt, füllt der Bot freies Geld (z. B. nach einer Sonderzahlung) auch bei kleinen Lücken in die bestehenden Positionen, statt es liegen zu lassen.
+
 ## 0.8.9
 - Neue Option „Daytrader Sonderzahlungen gesamt (USD)“: erhöht das Kapital des Daytraders, zählt aber nicht als Gewinn. Die Rendite in sensor.daytrader_wert rechnet ab jetzt gegen Startbudget plus Sonderzahlungen.
 

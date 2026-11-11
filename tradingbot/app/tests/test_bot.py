@@ -767,3 +767,16 @@ def test_sec_user_agent_required():
     assert valid_user_agent("Max Muster max@example.com")
     assert not valid_user_agent("tradingbot")
     assert not valid_user_agent("")
+
+
+def test_top_up_small_gaps_when_all_slots_full():
+    bot, broker = make_bot(("AAA", "BBB"), budget=1000.0)
+    r = bot.cfg.risk
+    r.max_positions, r.max_position_pct, r.min_cash_reserve_pct = 2, 0.5, 0.0
+    bot.run_cycle()
+    assert set(bot.storage.all_meta()) == {"AAA", "BBB"}
+    bot.cfg.risk.extra_deposits = 200  # Lücke je Position 50 $ = 8 % der Zielgröße
+    broker.cash += 200
+    bot.run_cycle()
+    meta = bot.storage.all_meta()
+    assert meta["AAA"] == pytest.approx(600) and meta["BBB"] == pytest.approx(600)

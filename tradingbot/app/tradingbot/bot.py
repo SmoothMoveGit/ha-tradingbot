@@ -66,10 +66,12 @@ class TradingBot:
         """Nachkaufen, wenn eine gehaltene Aktie nach Einzahlungen deutlich unter ihrer Zielgröße liegt."""
         r, st = self.cfg.risk, self.cfg.strategy
         target = self.risk.bot_capital() * r.max_position_pct
+        # Alle Plätze belegt: freies Geld sonst ungenutzt, daher schon kleine Lücken auffüllen
+        min_gap = r.min_order_value if len(meta) >= r.max_positions else max(r.min_order_value, target * r.top_up_min_gap_pct)
         for sym in sorted(meta, key=lambda s: meta[s]):
             sig = signals.get(sym)
             gap = target - meta[sym]
-            if not sig or sig.score < st.buy_threshold or gap < max(r.min_order_value, target * r.top_up_min_gap_pct):
+            if not sig or sig.score < st.buy_threshold or gap < min_gap:
                 continue
             if self.news.latest_shock(sym) <= st.panic_news_threshold or self.news.sec_block(sym, today):
                 continue
