@@ -73,7 +73,8 @@ def backtest(cfg, years: float, variants: bool = False) -> int:
     """Regeln gegen echte Alpaca-Tageskurse der letzten Jahre testen."""
     from datetime import datetime, timedelta, timezone
 
-    from .backtest import WARMUP_DAYS, format_result, format_variants, run_backtest, run_variants
+    from .backtest import (WARMUP_DAYS, compare_watchlists, format_result, format_variants, run_backtest,
+                           run_variants, watchlist_sets)
     from .broker.alpaca import AlpacaBroker
     broker = AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)
     end = datetime.now(timezone.utc)
@@ -88,6 +89,13 @@ def backtest(cfg, years: float, variants: bool = False) -> int:
         cut = (end - timedelta(days=365)).date()
         for line in format_variants(run_variants(cfg, bars, start.date(), cut, end.date())):
             out.info(line)
+        try:  # größere Watchlist zum Vergleich, der Live-Bot handelt weiter mit seiner eigenen
+            extra = [s for _, wl in watchlist_sets(cfg.watchlist) for s in wl if s not in bars]
+            bars.update(broker.history(list(dict.fromkeys(extra)), start - timedelta(days=WARMUP_DAYS * 1.5)))
+            for line in compare_watchlists(cfg, bars, start.date(), cut, end.date()):
+                out.info(line)
+        except Exception:
+            logging.getLogger(__name__).exception("Watchlist-Vergleich fehlgeschlagen")
     return 0
 
 

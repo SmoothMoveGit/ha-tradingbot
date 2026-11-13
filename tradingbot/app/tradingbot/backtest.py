@@ -181,3 +181,35 @@ def format_variants(results: list[dict]) -> list[str]:
                      f"{x['trades']:3d} Tr.) | B {y['return_pct']:+7.1%} (Rückg. {y['max_drawdown_pct']:4.0%})"
                      + (" NOT-AUS" if x["halted"] or y["halted"] else ""))
     return lines
+
+
+ETFS = {"QQQ", "SPY", "IWM", "SMH", "XLF"}
+
+
+def watchlist_sets(watchlist: list[str]) -> list[tuple[str, list[str]]]:
+    """Aktuelle Watchlist gegen das größere Universum des Daytraders (mit und ohne Index-ETFs)."""
+    from .daytrader import EXTRA_SYMBOLS, MORE_SYMBOLS
+    big = list(dict.fromkeys(watchlist + EXTRA_SYMBOLS + MORE_SYMBOLS))
+    return [(f"{len(watchlist)} Werte (aktuell)", list(watchlist)),
+            (f"{len(watchlist) + len(EXTRA_SYMBOLS)} Werte", list(dict.fromkeys(watchlist + EXTRA_SYMBOLS))),
+            (f"{len([s for s in big if s not in ETFS])} Aktien, ohne ETFs", [s for s in big if s not in ETFS]),
+            (f"{len(big)} Werte (wie Daytrader)", big)]
+
+
+def compare_watchlists(cfg, bars: dict[str, list[Bar]], start: date, cut: date, end: date) -> list[str]:
+    """Gleiche Strategie, nur andere Watchlist: 3 Jahre am Stück sowie Zeitraum A und Prüfjahr B."""
+    lines = ["WATCHLIST-VERGLEICH (aktuelle Strategie, nur Trend + Risikoregeln, ohne Nachrichten)"]
+    for name, wl in watchlist_sets(cfg.watchlist):
+        vcfg = copy.deepcopy(cfg)
+        vcfg.watchlist = [s for s in wl if bars.get(s)]
+        full = run_backtest(vcfg, bars, start, end)
+        a = run_backtest(vcfg, bars, start, cut)
+        b = run_backtest(vcfg, bars, cut, end)
+        lines.append(
+            f"  {name:24} 3 J {full['return_pct']:+7.1%} (Rückg. {full['max_drawdown_pct']:4.0%}, {full['trades']:3d} Tr., "
+            f"{full['win_rate']:.0%} Gewinner) | A {a['return_pct']:+7.1%} (Rückg. {a['max_drawdown_pct']:4.0%}) "
+            f"| B {b['return_pct']:+7.1%} (Rückg. {b['max_drawdown_pct']:4.0%})" + (" NOT-AUS" if full["halted"] else ""))
+    if full["benchmark"]:
+        lines.append(f"  {full['benchmark'] + ' halten':24} 3 J {full['benchmark_return_pct']:+7.1%} "
+                     f"| A {a['benchmark_return_pct']:+7.1%} | B {b['benchmark_return_pct']:+7.1%}")
+    return lines

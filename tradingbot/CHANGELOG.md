@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.11
+- Backtest beim Start vergleicht zusätzlich die Watchlist: aktuelle 10 Werte gegen 25, 35 Aktien und die 40 Werte des Daytraders (gleiche Strategie). Nur Vergleich, der Bot handelt weiter mit seiner Watchlist.
+
 ## 0.8.10
 - Nachkauf: Sind alle Plätze belegt, füllt der Bot freies Geld (z. B. nach einer Sonderzahlung) auch bei kleinen Lücken in die bestehenden Positionen, statt es liegen zu lassen.
 

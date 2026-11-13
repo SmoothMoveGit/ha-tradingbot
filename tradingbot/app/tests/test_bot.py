@@ -780,3 +780,19 @@ def test_top_up_small_gaps_when_all_slots_full():
     bot.run_cycle()
     meta = bot.storage.all_meta()
     assert meta["AAA"] == pytest.approx(600) and meta["BBB"] == pytest.approx(600)
+
+
+def test_compare_watchlists_runs_on_sim_data():
+    from datetime import timedelta as td
+    from tradingbot.backtest import compare_watchlists, watchlist_sets
+    from tradingbot.broker.base import Bar
+    sets = watchlist_sets(["AAA", "BBB"])
+    syms = sorted({s for _, wl in sets for s in wl})
+    t0 = datetime(2023, 1, 2, tzinfo=timezone.utc)
+    bars = {s: [Bar(t0 + td(days=i), 100 + i * (k % 3) * 0.1, 101 + i * 0.1, 99, 100 + i * (k % 3) * 0.1, 1000)
+                for i in range(500)] for k, s in enumerate(syms)}
+    cfg = load_config()
+    cfg.watchlist, cfg.benchmark = ["AAA", "BBB"], None
+    lines = compare_watchlists(cfg, bars, (t0 + td(days=260)).date(), (t0 + td(days=380)).date(), (t0 + td(days=499)).date())
+    assert len(lines) == 1 + len(sets)
+    assert "Daytrader" in lines[-1]
