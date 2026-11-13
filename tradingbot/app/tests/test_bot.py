@@ -796,3 +796,24 @@ def test_compare_watchlists_runs_on_sim_data():
     lines = compare_watchlists(cfg, bars, (t0 + td(days=260)).date(), (t0 + td(days=380)).date(), (t0 + td(days=499)).date())
     assert len(lines) == 1 + len(sets)
     assert "Daytrader" in lines[-1]
+
+
+def test_momentum_rotation_picks_strongest_and_respects_market_filter():
+    from datetime import timedelta as td
+    from tradingbot.broker.base import Bar
+    from tradingbot.momentum import run_momentum
+    t0 = datetime(2022, 1, 3, tzinfo=timezone.utc)
+    n = 700
+
+    def series(f):
+        return [Bar(t0 + td(days=i), f(i), f(i), f(i), f(i), 1000) for i in range(n)]
+
+    bars = {"UP": series(lambda i: 100 * 1.002 ** i), "FLAT": series(lambda i: 100.0),
+            "DOWN": series(lambda i: 100 * 0.999 ** i), "SPY": series(lambda i: 100 * 1.0005 ** i),
+            "URTH": series(lambda i: 100.0)}
+    start, end = (t0 + td(days=300)).date(), (t0 + td(days=n - 1)).date()
+    r = run_momentum(bars, ["UP", "FLAT", "DOWN"], start, end, top_n=1, deposit=0)
+    assert r["return_pct"] > 0.5  # nur UP gehalten
+    bars["SPY"] = series(lambda i: 100 * 0.999 ** i)  # Markt im Abwärtstrend -> bar
+    r = run_momentum(bars, ["UP", "FLAT", "DOWN"], start, end, top_n=1, deposit=0)
+    assert abs(r["return_pct"]) < 1e-9 and r["trades"] == 0

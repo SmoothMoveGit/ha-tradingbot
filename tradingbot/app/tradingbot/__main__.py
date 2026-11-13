@@ -96,6 +96,15 @@ def backtest(cfg, years: float, variants: bool = False) -> int:
                 out.info(line)
         except Exception:
             logging.getLogger(__name__).exception("Watchlist-Vergleich fehlgeschlagen")
+        try:  # Momentum-Rotation braucht 12 Monate Vorlauf, daher eigene, längere Kurshistorie
+            from .momentum import compare_momentum
+            sets = watchlist_sets(cfg.watchlist)
+            syms = list(dict.fromkeys([s for _, wl in sets for s in wl] + ["SPY", cfg.benchmark]))
+            long_bars = broker.history([s for s in syms if s], start - timedelta(days=420))
+            for line in compare_momentum(cfg, long_bars, start.date(), cut, end.date(), sets):
+                out.info(line)
+        except Exception:
+            logging.getLogger(__name__).exception("Momentum-Vergleich fehlgeschlagen")
     return 0
 
 

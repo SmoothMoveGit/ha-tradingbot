@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.13
+- Backtest beim Start vergleicht zusätzlich eine Momentum-Rotation (monatlich die stärksten Aktien der letzten 12 Monate, mit Markt- und Trendfilter). Nur Vergleich, der Bot handelt unverändert.
+
 ## 0.8.12
 - Daytrader-Vergleich beim Start: aktive 40 Werte gegen 60 und 100 Werte (gleiche Regeln, nur größere Auswahl) und 100 Werte mit 4 statt 3 Positionen. Der Live-Daytrader handelt weiter die 40 Werte.
 - Daytrader-Grundliste fest im Code, damit eine Änderung der Hauptbot-Watchlist den Daytrader nicht mitverändert.
