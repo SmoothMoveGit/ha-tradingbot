@@ -103,30 +103,33 @@ def daytrade(cfg) -> int:
     """Zweiter Bot (nur Spielgeld): erst Backtest der letzten Wochen, dann Daytrading."""
     from .broker.alpaca import AlpacaBroker
     import threading
-    from .daytrader import EXTRA_SYMBOLS, LOOSE, MORE_SYMBOLS, DayTrader, backtest as day_backtest, config_from_env
+    from .daytrader import (DAY_BASE, EXTRA_SYMBOLS, LOOSE, MORE_SYMBOLS, TEST_SYMBOLS_60, TEST_SYMBOLS_100,
+                            DayTrader, backtest as day_backtest, config_from_env)
     from .earnings import EarningsCalendar
     from .homeassistant import HomeAssistantReporter
     # Seit 0.8.6: gelockertes Regelwerk auf 40 Werten, Ziel 1,5R, Einstand-Stop ab 1R, keine Käufe in den letzten
     # 150 min (40-Tage-Vergleich vom 09.11.: +2,5 % bei 76 Trades statt +2,1 % bei 89; späte Käufe verloren live),
     # seit 0.8.7 bis zu 5 Trades pro Tag (im Test gleiches Ergebnis, Michi wünscht mehr Spielraum)
-    wide = list(dict.fromkeys(cfg.watchlist + EXTRA_SYMBOLS))
+    wide = list(dict.fromkeys(DAY_BASE + EXTRA_SYMBOLS))
     wider = list(dict.fromkeys(wide + MORE_SYMBOLS))
+    w60 = list(dict.fromkeys(wider + TEST_SYMBOLS_60))
+    w100 = list(dict.fromkeys(w60 + TEST_SYMBOLS_100))
     exit_b = {"reward_risk": 1.5, "breakeven_r": 1.0, "no_entry_last_min": 150, "max_trades_per_day": 5}
     dcfg = config_from_env(wider, **LOOSE, **exit_b)
     broker = AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)  # Daytrader nie mit echtem Geld
     log = logging.getLogger("tradingbot.daytrader")
     def compare() -> None:
         try:
-            bars = broker.intraday_bars(wider, days=90)  # ~60 Handelstage: 40 Testtage + Vorlauf für den 20-Tage-Schnitt
+            bars = broker.intraday_bars(w100, days=90)  # ~60 Handelstage: 40 Testtage + Vorlauf für den 20-Tage-Schnitt
+            log.info("DAYTRADER-DATEN %d von %d Werten mit Kursdaten", sum(1 for s in w100 if bars.get(s)), len(w100))
             base = {**LOOSE, "watchlist": wider, **exit_b}
-            # 0.8.6: Trades pro Tag und Tagesmuster aus dem Skill-Scanner als Vorauswahl
+            # 0.8.11: mehr Werte (Michi, 13.11.) - gleiche Regeln, nur größere Auswahl
             variants = [
-                ("aktiv: keine Käufe in den letzten 150 min, 5 Trades/Tag", base),
-                ("bis 0.8.5 (Käufe bis 45 min vor Schluss)", {**base, "no_entry_last_min": 45}),
-                ("3 Trades pro Tag (bis 0.8.6)", {**base, "max_trades_per_day": 3}),
-                ("ohne Trade-Grenze", {**base, "max_trades_per_day": 99}),
-                ("Vorauswahl Tagesmuster (20-Tage-Hoch, Flagge, über 20-Tage-Schnitt)", {**base, "daily_setup": "any"}),
-                ("Vorauswahl nur 20-Tage-Hoch", {**base, "daily_setup": "breakout20"}),
+                (f"aktiv: {len(wider)} Werte", base),
+                (f"{len(w60)} Werte", {**base, "watchlist": w60}),
+                (f"{len(w100)} Werte", {**base, "watchlist": w100}),
+                (f"{len(w100)} Werte, 4 Positionen à 25 %", {**base, "watchlist": w100, "max_positions": 4,
+                                                            "max_position_pct": 0.25}),
             ]
             for name, over in variants:
                 over = dict(over)

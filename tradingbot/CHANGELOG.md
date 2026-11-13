@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.12
+- Daytrader-Vergleich beim Start: aktive 40 Werte gegen 60 und 100 Werte (gleiche Regeln, nur größere Auswahl) und 100 Werte mit 4 statt 3 Positionen. Der Live-Daytrader handelt weiter die 40 Werte.
+- Daytrader-Grundliste fest im Code, damit eine Änderung der Hauptbot-Watchlist den Daytrader nicht mitverändert.
+- Intraday-Kurse werden in Paketen zu 20 Werten geladen (weniger Speicher auf dem Pi).
+
 ## 0.8.11
 - Backtest beim Start vergleicht zusätzlich die Watchlist: aktuelle 10 Werte gegen 25, 35 Aktien und die 40 Werte des Daytraders (gleiche Strategie). Nur Vergleich, der Bot handelt weiter mit seiner Watchlist.
 

@@ -74,11 +74,17 @@ class AlpacaBroker(Broker):
         from alpaca.data.timeframe import TimeFrameUnit
         ny = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/New_York"))
         start = ny.replace(hour=9, minute=30, second=0, microsecond=0) - timedelta(days=days)
-        req = StockBarsRequest(symbol_or_symbols=symbols, timeframe=TimeFrame(5, TimeFrameUnit.Minute),
-                               start=start, feed=DataFeed.IEX)
-        data = self.data.get_stock_bars(req).data
-        return {s: [Bar(b.timestamp, b.open, b.high, b.low, b.close, b.volume) for b in data.get(s, [])]
-                for s in symbols}
+        out: dict[str, list[Bar]] = {}
+        # in Paketen abrufen, damit bei vielen Werten (Backtest) nicht alles auf einmal im Speicher liegt
+        for k in range(0, len(symbols), 20):
+            chunk = symbols[k:k + 20]
+            req = StockBarsRequest(symbol_or_symbols=chunk, timeframe=TimeFrame(5, TimeFrameUnit.Minute),
+                                   start=start, feed=DataFeed.IEX)
+            data = self.data.get_stock_bars(req).data
+            for s in chunk:
+                out[s] = [Bar(b.timestamp, b.open, b.high, b.low, b.close, b.volume) for b in data.get(s, [])]
+            del data
+        return out
 
     def _wait_fill(self, order_id, timeout: float = 30.0):
         deadline = time.time() + timeout

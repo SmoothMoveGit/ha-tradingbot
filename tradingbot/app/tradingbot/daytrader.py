@@ -84,6 +84,20 @@ EXTRA_SYMBOLS = ["AMD", "AVGO", "TSLA", "NFLX", "ORCL", "CRM", "COST", "WMT", "X
 MORE_SYMBOLS = ["QQQ", "SPY", "IWM", "SMH", "XLF", "PLTR", "UBER", "MU", "QCOM", "ADBE",
                 "INTC", "PYPL", "PEP", "CSCO", "DIS"]
 
+# Grundliste des Daytraders (bis 0.8.10 aus der Hauptbot-Watchlist übernommen; jetzt fest, damit eine
+# Änderung der Hauptbot-Watchlist den Daytrader nicht mitverändert)
+DAY_BASE = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "JPM", "V", "KO", "JNJ"]
+
+# Nur für den Vergleich (0.8.11): weitere große, liquide US-Werte, 20 Stück -> 60 Werte
+TEST_SYMBOLS_60 = ["GS", "MS", "WFC", "C", "CVX", "ABBV", "MRK", "PFE", "TXN", "AMAT",
+                   "LRCX", "IBM", "NOW", "SHOP", "COIN", "MRVL", "ARM", "ANET", "PANW", "CAT"]
+
+# Nur für den Vergleich (0.8.11): noch einmal 40 Stück -> 100 Werte
+TEST_SYMBOLS_100 = ["BA", "GE", "HON", "LMT", "NKE", "SBUX", "MCD", "T", "VZ", "CMCSA",
+                    "TMO", "ABT", "AMGN", "GILD", "BMY", "UPS", "DE", "RTX", "SCHW", "AXP",
+                    "BLK", "SNOW", "CRWD", "NET", "DDOG", "ABNB", "DASH", "SOFI", "RIVN", "F",
+                    "GM", "SLB", "COP", "OXY", "XLE", "XLK", "DIA", "KRE", "XLV", "SMCI"]
+
 # Gelockerte Fassung des Regelwerks (Michi hat Anpassungen freigegeben, 2026-11-03)
 LOOSE = {"rsi_min": 45.0, "rsi_max": 75.0, "min_ema_gap": 0.0002, "max_vwap_crosses": 6,
          "pullback_tol": 0.003, "vol_factor": 0.8, "entry_valid_bars": 2}
