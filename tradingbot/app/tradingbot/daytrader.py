@@ -88,11 +88,11 @@ MORE_SYMBOLS = ["QQQ", "SPY", "IWM", "SMH", "XLF", "PLTR", "UBER", "MU", "QCOM",
 # Änderung der Hauptbot-Watchlist den Daytrader nicht mitverändert)
 DAY_BASE = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "JPM", "V", "KO", "JNJ"]
 
-# Nur für den Vergleich (0.8.11): weitere große, liquide US-Werte, 20 Stück -> 60 Werte
+# Seit 0.8.14 live: weitere große, liquide US-Werte, 20 Stück -> 60 Werte
 TEST_SYMBOLS_60 = ["GS", "MS", "WFC", "C", "CVX", "ABBV", "MRK", "PFE", "TXN", "AMAT",
                    "LRCX", "IBM", "NOW", "SHOP", "COIN", "MRVL", "ARM", "ANET", "PANW", "CAT"]
 
-# Nur für den Vergleich (0.8.11): noch einmal 40 Stück -> 100 Werte
+# Nur Vergleich (0.8.12): noch einmal 40 Stück -> 100 Werte (schlechter als 60, nicht aktiv)
 TEST_SYMBOLS_100 = ["BA", "GE", "HON", "LMT", "NKE", "SBUX", "MCD", "T", "VZ", "CMCSA",
                     "TMO", "ABT", "AMGN", "GILD", "BMY", "UPS", "DE", "RTX", "SCHW", "AXP",
                     "BLK", "SNOW", "CRWD", "NET", "DDOG", "ABNB", "DASH", "SOFI", "RIVN", "F",

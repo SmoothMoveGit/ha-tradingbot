@@ -112,33 +112,31 @@ def daytrade(cfg) -> int:
     """Zweiter Bot (nur Spielgeld): erst Backtest der letzten Wochen, dann Daytrading."""
     from .broker.alpaca import AlpacaBroker
     import threading
-    from .daytrader import (DAY_BASE, EXTRA_SYMBOLS, LOOSE, MORE_SYMBOLS, TEST_SYMBOLS_60, TEST_SYMBOLS_100,
+    from .daytrader import (DAY_BASE, EXTRA_SYMBOLS, LOOSE, MORE_SYMBOLS, TEST_SYMBOLS_60,
                             DayTrader, backtest as day_backtest, config_from_env)
     from .earnings import EarningsCalendar
     from .homeassistant import HomeAssistantReporter
     # Seit 0.8.6: gelockertes Regelwerk auf 40 Werten, Ziel 1,5R, Einstand-Stop ab 1R, keine Käufe in den letzten
     # 150 min (40-Tage-Vergleich vom 09.11.: +2,5 % bei 76 Trades statt +2,1 % bei 89; späte Käufe verloren live),
-    # seit 0.8.7 bis zu 5 Trades pro Tag (im Test gleiches Ergebnis, Michi wünscht mehr Spielraum)
+    # seit 0.8.7 bis zu 5 Trades pro Tag (im Test gleiches Ergebnis, Michi wünscht mehr Spielraum),
+    # seit 0.8.14 60 statt 40 Werte (Vergleich 13.11.: 60 Werte +3,9 %/95 Trades, 40 Werte +3,1 %/81,
+    # 100 Werte nur +2,0 %; Michis Wahl per Entscheidungskarte)
     wide = list(dict.fromkeys(DAY_BASE + EXTRA_SYMBOLS))
     wider = list(dict.fromkeys(wide + MORE_SYMBOLS))
     w60 = list(dict.fromkeys(wider + TEST_SYMBOLS_60))
-    w100 = list(dict.fromkeys(w60 + TEST_SYMBOLS_100))
     exit_b = {"reward_risk": 1.5, "breakeven_r": 1.0, "no_entry_last_min": 150, "max_trades_per_day": 5}
-    dcfg = config_from_env(wider, **LOOSE, **exit_b)
+    dcfg = config_from_env(w60, **LOOSE, **exit_b)
     broker = AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)  # Daytrader nie mit echtem Geld
     log = logging.getLogger("tradingbot.daytrader")
     def compare() -> None:
         try:
-            bars = broker.intraday_bars(w100, days=90)  # ~60 Handelstage: 40 Testtage + Vorlauf für den 20-Tage-Schnitt
-            log.info("DAYTRADER-DATEN %d von %d Werten mit Kursdaten", sum(1 for s in w100 if bars.get(s)), len(w100))
-            base = {**LOOSE, "watchlist": wider, **exit_b}
-            # 0.8.11: mehr Werte (Michi, 13.11.) - gleiche Regeln, nur größere Auswahl
+            bars = broker.intraday_bars(w60, days=90)  # ~60 Handelstage: 40 Testtage + Vorlauf für den 20-Tage-Schnitt
+            log.info("DAYTRADER-DATEN %d von %d Werten mit Kursdaten", sum(1 for s in w60 if bars.get(s)), len(w60))
+            base = {**LOOSE, "watchlist": w60, **exit_b}
+            # 0.8.14: aktiv 60 Werte, zum Vergleich die 40 Werte bis 0.8.13 (wöchentlich prüfen)
             variants = [
-                (f"aktiv: {len(wider)} Werte", base),
-                (f"{len(w60)} Werte", {**base, "watchlist": w60}),
-                (f"{len(w100)} Werte", {**base, "watchlist": w100}),
-                (f"{len(w100)} Werte, 4 Positionen à 25 %", {**base, "watchlist": w100, "max_positions": 4,
-                                                            "max_position_pct": 0.25}),
+                (f"aktiv: {len(w60)} Werte", base),
+                (f"{len(wider)} Werte (bis 0.8.13)", {**base, "watchlist": wider}),
             ]
             for name, over in variants:
                 over = dict(over)

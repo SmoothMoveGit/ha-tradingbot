@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.14
+- Daytrader handelt 60 statt 40 Werte (gleiche Regeln). 40-Tage-Vergleich: 60 Werte +3,9 % bei 95 Trades, 40 Werte +3,1 % bei 81, 100 Werte nur +2,0 %.
+- Startvergleich nur noch 60 gegen 40 Werte (der Lauf mit 100 Werten dauerte auf dem Pi fast eine Stunde).
+
 ## 0.8.13
 - Backtest beim Start vergleicht zusätzlich eine Momentum-Rotation (monatlich die stärksten Aktien der letzten 12 Monate, mit Markt- und Trendfilter). Nur Vergleich, der Bot handelt unverändert.
 
