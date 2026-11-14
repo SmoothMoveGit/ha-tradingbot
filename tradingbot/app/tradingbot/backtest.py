@@ -160,7 +160,11 @@ def run_variants(cfg, bars: dict[str, list[Bar]], start: date, cut: date, end: d
            for f in {f for _, _, f in LEVERAGED}}
     results = []
     for name, overrides, data in [(n, o, bars) for n, o in VARIANTS] + [(n, o, lev[f]) for n, o, f in LEVERAGED]:
-        vcfg = _merge(copy.deepcopy(cfg), overrides)
+        vcfg = copy.deepcopy(cfg)
+        if cfg.strategy.rotation and name != "aktuell":  # Trend-Varianten wie bisher auf Basis "aggressiv"
+            vcfg.strategy.rotation = False
+            vcfg = _merge(vcfg, copy.deepcopy(PROFILES["aggressiv"]))
+        vcfg = _merge(vcfg, overrides)
         a = run_backtest(vcfg, data, start, cut)
         b = run_backtest(vcfg, data, cut, end)
         results.append({"name": name, "train": a, "test": b})

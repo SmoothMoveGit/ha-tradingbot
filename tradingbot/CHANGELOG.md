@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.16
+- Backtest-Varianten beim Start: bei Strategie momentum zeigt "aktuell" die Rotation, die übrigen Varianten rechnen wieder auf Basis aggressiv (vorher alle gleich).
+
 ## 0.8.15
 - Neue Strategie *momentum*: monatlich die 4 Aktien mit der besten 12-Monats-Rendite (ohne letzten Monat), je 25 %, keine Stops. Notbremse bleiben SEC-Meldungen, sehr schlechte Nachrichten und Not-Aus. Beim Wechsel storniert der Bot alte Stop-Orders.
 - Backtest beim Start rechnet das Profil *momentum* zusätzlich mit der echten Bot-Logik.
