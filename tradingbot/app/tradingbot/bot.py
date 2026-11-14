@@ -1,6 +1,7 @@
 """Hauptlogik: ein Handelszyklus und die Endlosschleife."""
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -128,6 +129,97 @@ class TradingBot:
                 self.reporter.notify(f"Tradingbot: {sym} gekürzt", f"{fill.qty * fill.price:.2f} $ frei für eine weitere Aktie")
             if held:  # Stop wurde für den Verkauf entfernt: mit neuer Stückzahl wieder setzen
                 self._broker_stop(held, self.storage.update_high(sym, held.current_price))
+
+    def _buy(self, sym: str, amount: float, reason: str, meta: dict) -> bool:
+        fill = self.broker.buy_notional(sym, amount)
+        if not fill:
+            return False
+        cost = fill.qty * fill.price
+        self.storage.open_meta(sym, cost, fill.price)
+        meta[sym] = self.storage.all_meta()[sym]
+        self.storage.record_trade(sym, "buy", fill.qty, fill.price, reason)
+        held = self.broker.positions().get(sym)
+        if held:
+            self._broker_stop(held, self.storage.update_high(sym, fill.price))
+        log.info("KAUF %s %.4f @ %.2f (%.2f) | %s", sym, fill.qty, fill.price, cost, reason)
+        self.reporter.notify(f"Tradingbot: {sym} gekauft", f"{cost:.2f} $ zu {fill.price:.2f} $ ({reason})")
+        return True
+
+    def _sell_part(self, sym: str, pos, qty: float, reason: str, meta: dict) -> None:
+        fill = self.broker.sell_qty(sym, qty)
+        if not fill:
+            return
+        frac = min(1.0, fill.qty / pos.qty)
+        pnl = fill.qty * fill.price - meta[sym] * frac
+        self.storage.reduce_meta(sym, frac)
+        meta[sym] = self.storage.all_meta()[sym]
+        self.storage.record_trade(sym, "sell", fill.qty, fill.price, reason, pnl)
+        log.info("TEILVERKAUF %s %.4f @ %.2f | %s | G/V %+.2f", sym, fill.qty, fill.price, reason, pnl)
+
+    def momentum_scores(self) -> dict[str, float]:
+        """12-Monats-Rendite ohne den letzten Monat, nur aus Kursen bis heute."""
+        st = self.cfg.strategy
+        out = {}
+        for sym in self.cfg.watchlist:
+            try:
+                c = [b.close for b in self.broker.daily_bars(sym, st.rotation_lookback + 5)]
+            except Exception:
+                log.exception("Kursdaten für %s fehlen", sym)
+                continue
+            if len(c) > st.rotation_lookback:
+                out[sym] = c[-1 - st.rotation_skip] / c[-1 - st.rotation_lookback] - 1
+        return out
+
+    def _rotate(self, positions: dict, meta: dict, today: date, limit: str | None) -> None:
+        """Momentum-Rotation: Notbremse jeden Lauf, Umschichten einmal im Monat, neues Geld sofort anlegen."""
+        st, r = self.cfg.strategy, self.cfg.risk
+        for sym in list(positions):
+            reason = None
+            if filing := self.news.sec_block(sym, today):
+                reason = f"SEC-Meldung: {filing}"
+            elif self._news_panic(sym):
+                reason = "sehr negative Nachricht"
+            if reason:
+                self._sell(sym, reason, meta, today)
+                positions.pop(sym)
+        if limit == "day":
+            self.status = "Tageslimit erreicht"
+            return
+        self.status = "handelt"
+        month = f"{today:%Y-%m}"
+        picks = json.loads(self.storage.get("rotation_picks", "[]"))
+        if self.storage.get("rotation_month") != month:
+            scores = self.momentum_scores()
+            ok = {s: v for s, v in scores.items() if not self.news.sec_block(s, today)
+                  and self.news.latest_shock(s) > st.panic_news_threshold}
+            picks = sorted(ok, key=ok.get, reverse=True)[: st.rotation_top_n]
+            log.info("ROTATION %s: %s (12-Monats-Rendite %s)", month, ", ".join(picks),
+                     ", ".join(f"{s} {ok[s]:+.0%}" for s in picks))
+            value = self.risk.bot_capital() - sum(meta.values()) + sum(p.market_value for p in positions.values())
+            target = value / st.rotation_top_n
+            for sym in [s for s in positions if s not in picks]:
+                self._sell(sym, f"Rotation: nicht mehr unter den Top {st.rotation_top_n}", meta, today)
+            if not r.broker_stops:  # alte Stop-Orders aus der Trend-Strategie würden sonst weiter verkaufen
+                for sym in positions:
+                    if sym in picks:
+                        self.broker.cancel_orders(sym)
+            for sym in picks:
+                pos = self.broker.positions().get(sym) if sym in meta else None
+                if pos and pos.market_value - target >= r.min_order_value:
+                    self._sell_part(sym, pos, pos.qty * (pos.market_value - target) / pos.market_value,
+                                    "Rotation: auf Zielgröße", meta)
+            self.storage.set("rotation_picks", json.dumps(picks))
+            self.storage.set("rotation_month", month)
+        # kaufen bzw. auffüllen: Ziel nach Einstand, so landet auch neues Geld (Einzahlungen) in den Top-Aktien
+        target = self.risk.bot_capital() / st.rotation_top_n
+        held = self.broker.positions()
+        for sym in sorted(picks, key=lambda s: meta.get(s, 0.0)):
+            now_value = held[sym].market_value if sym in meta and sym in held else 0.0
+            gap = target - max(now_value, meta.get(sym, 0.0))
+            amount = min(gap, self.risk.free_budget(sum(meta.values()), self.broker.account().cash))
+            if (amount >= r.min_order_value and not self.news.sec_block(sym, today)
+                    and self.news.latest_shock(sym) > st.panic_news_threshold):
+                self._buy(sym, amount, f"Rotation: Top {st.rotation_top_n} nach 12-Monats-Rendite", meta)
 
     def _sell(self, symbol: str, reason: str, meta: dict, today: date) -> None:
         fill = self.broker.sell_all(symbol)
@@ -294,6 +386,11 @@ class TradingBot:
                 self._sell(sym, "Not-Aus Drawdown", meta, today)
             return
 
+        if self.cfg.strategy.rotation:
+            self._rotate(positions, meta, today, limit)
+            self._finish()
+            return
+
         market = self.news.score(MARKET)
         st = self.cfg.strategy
         signals = {}
@@ -365,6 +462,9 @@ class TradingBot:
                 self.reporter.notify(f"Tradingbot: {sig.symbol} gekauft", f"{cost:.2f} $ zu {fill.price:.2f} $ ({reason})")
             self._top_up(signals, meta, soon if candidates else None, today)
 
+        self._finish()
+
+    def _finish(self) -> None:
         positions, meta = self._own_positions()
         value = self.risk.bot_capital() - sum(meta.values()) + sum(p.market_value for p in positions.values())
         self.storage.record_equity(value, self.risk.bot_capital(), self.broker.account().equity)

@@ -30,7 +30,7 @@ configuration:
     description: Summe aller Einmalzahlungen für den Daytrader. Erhöht das Kapital, zählt aber nicht als Gewinn.
   strategy:
     name: Strategie
-    description: "standard = kurzer Trend, enge Stops. trendfolger = langer Trend 50/200, Stops 15 %. aggressiv = wie trendfolger, aber 4 große Positionen, keine Reserve, Not-Aus erst bei 50 % Verlust."
+    description: "standard = kurzer Trend, enge Stops. trendfolger = langer Trend 50/200, Stops 15 %. aggressiv = wie trendfolger, aber 4 große Positionen, keine Reserve, Not-Aus erst bei 50 % Verlust. momentum = monatlich die 4 Aktien mit der besten 12-Monats-Rendite, je 25 %, keine Stops."
   notify_service:
     name: Benachrichtigungsdienst
     description: "z.B. notify.mobile_app_dein_handy. Leer = Benachrichtigung in Home Assistant."

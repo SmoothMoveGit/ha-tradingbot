@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.15
+- Neue Strategie *momentum*: monatlich die 4 Aktien mit der besten 12-Monats-Rendite (ohne letzten Monat), je 25 %, keine Stops. Notbremse bleiben SEC-Meldungen, sehr schlechte Nachrichten und Not-Aus. Beim Wechsel storniert der Bot alte Stop-Orders.
+- Backtest beim Start rechnet das Profil *momentum* zusätzlich mit der echten Bot-Logik.
+
 ## 0.8.14
 - Daytrader handelt 60 statt 40 Werte (gleiche Regeln). 40-Tage-Vergleich: 60 Werte +3,9 % bei 95 Trades, 40 Werte +3,1 % bei 81, 100 Werte nur +2,0 %.
 - Startvergleich nur noch 60 gegen 40 Werte (der Lauf mit 100 Werten dauerte auf dem Pi fast eine Stunde).

@@ -8,6 +8,7 @@ Jeder Tag sieht nur Kurse bis zu diesem Tag.
 """
 from __future__ import annotations
 
+import copy
 from datetime import date
 
 from .broker.base import Bar
@@ -118,4 +119,14 @@ def compare_momentum(cfg, bars: dict[str, list[Bar]], start: date, cut: date, en
         lines.append(f"  {name:26} 3 J {full['return_pct']:+7.1%} (Rückg. {full['max_drawdown_pct']:4.0%}, "
                      f"{full['trades']:3d} Tr.) | A {a['return_pct']:+7.1%} (Rückg. {a['max_drawdown_pct']:4.0%}) "
                      f"| B {b['return_pct']:+7.1%} (Rückg. {b['max_drawdown_pct']:4.0%})")
+    try:  # dieselbe Regel mit der echten Bot-Logik (Profil "momentum"), zur Kontrolle der Umsetzung
+        from .backtest import _merge, run_backtest
+        from .config import PROFILES
+        mcfg = _merge(copy.deepcopy(cfg), PROFILES["momentum"])
+        mcfg.watchlist = list(small)
+        r = run_backtest(mcfg, bars, start, end)
+        lines.append(f"  {'Bot-Profil momentum':26} 3 J {r['return_pct']:+7.1%} (Rückg. {r['max_drawdown_pct']:4.0%}, "
+                     f"{r['trades']:3d} Tr.)")
+    except Exception as e:
+        lines.append(f"  Bot-Profil momentum: nicht berechenbar ({e})")
     return lines

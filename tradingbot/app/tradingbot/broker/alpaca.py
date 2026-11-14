@@ -129,6 +129,9 @@ class AlpacaBroker(Broker):
                 return
         log.warning("Offene Orders für %s nach 10 s noch nicht storniert", symbol)
 
+    def cancel_orders(self, symbol: str) -> None:
+        self._cancel_open(symbol)
+
     def ensure_stop(self, symbol: str, qty: float, stop_price: float) -> None:
         """Hält genau eine Stop-Order beim Broker aktuell. Gültig bis Handelsschluss, wird täglich erneuert."""
         stop_price = round(stop_price, 2)

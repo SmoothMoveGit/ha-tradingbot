@@ -26,7 +26,7 @@ configuration:
     description: Sum of all one-off deposits for the day trader. Raises the capital, not counted as profit.
   strategy:
     name: Strategy
-    description: "standard = short trend, tight stops. trendfolger = long trend 50/200, 15 % stops. aggressiv = like trendfolger, but 4 large positions, no cash reserve, emergency stop at 50 % loss."
+    description: "standard = short trend, tight stops. trendfolger = long trend 50/200, 15 % stops. aggressiv = like trendfolger, but 4 large positions, no cash reserve, emergency stop at 50 % loss. momentum = monthly the 4 stocks with the best 12-month return, 25 % each, no stops."
   notify_service:
     name: Notify service
     description: "e.g. notify.mobile_app_phone. Empty = persistent notification."

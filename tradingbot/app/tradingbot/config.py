@@ -44,6 +44,10 @@ class StrategyConfig:
     news_lookback_hours: int = 24
     news_half_life_hours: float = 6.0
     market_news_weight: float = 0.3       # Einfluss allgemeiner Weltnachrichten
+    rotation: bool = False                # Momentum-Rotation statt Trend-Signal (Profil "momentum")
+    rotation_top_n: int = 4               # so viele der stärksten Aktien halten
+    rotation_lookback: int = 252          # Rendite über ca. 12 Monate ...
+    rotation_skip: int = 21               # ... ohne den letzten Monat
 
 
 @dataclass
@@ -135,6 +139,12 @@ PROFILES: dict[str, dict] = {
     "aggressiv": {"strategy": _TREND_STRATEGY,
                   "risk": {**_TREND_STOPS, "max_positions": 4, "max_position_pct": 0.25, "min_cash_reserve_pct": 0.0,
                            "daily_loss_limit_pct": 0.10, "max_drawdown_pct": 0.50}},
+    # Momentum-Rotation: monatlich die 4 Aktien mit der besten 12-Monats-Rendite (ohne letzten Monat), je 25 %.
+    # Keine Stops (im Backtest besser), Notbremse bleiben SEC-Meldungen, sehr schlechte Nachrichten und Not-Aus.
+    "momentum": {"strategy": {**_TREND_STRATEGY, "rotation": True},
+                 "risk": {"stop_loss_pct": 1.0, "trailing_stop_pct": 1.0, "take_profit_pct": 100.0,
+                          "broker_stops": False, "max_positions": 4, "max_position_pct": 0.25,
+                          "min_cash_reserve_pct": 0.0, "daily_loss_limit_pct": 0.10, "max_drawdown_pct": 0.50}},
 }
 
 

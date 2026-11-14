@@ -80,6 +80,9 @@ class Broker(ABC):
     def ensure_stop(self, symbol: str, qty: float, stop_price: float) -> None:
         pass
 
+    def cancel_orders(self, symbol: str) -> None:
+        """Offene Orders (z.B. alte Stop-Orders) stornieren. Standard: nichts zu tun."""
+
     def last_sell_fill(self, symbol: str, since: datetime | None = None) -> Fill | None:
         """Letzter ausgeführter Verkauf, z.B. durch eine Stop-Order beim Broker."""
         return None

@@ -63,7 +63,10 @@ Idee nach trader-news aus github.com/Jakeschincariol/day-trader-skill (MIT-Lizen
 |---|---|---|---|---|---|
 | standard | 10/30 Tage | 5 % / Trailing 6 %, Gewinnmitnahme 12 % | 4 × 20 % | 10 % | 25 % |
 | trendfolger | 50/200 Tage | 15 % / Trailing 15 % | 4 × 20 % | 10 % | 25 % |
-| aggressiv | 50/200 Tage | 15 % / Trailing 15 % | 3 × 34 % | 0 % | 50 % |
+| aggressiv | 50/200 Tage | 15 % / Trailing 15 % | 4 × 25 % | 0 % | 50 % |
+| momentum | 12-Monats-Rendite (ohne letzten Monat) | keine | 4 × 25 % | 0 % | 50 % |
+
+**momentum:** Am ersten Handelstag jedes Monats nimmt der Bot die 4 Aktien der Watchlist mit der besten Rendite der letzten 12 Monate (ohne den letzten Monat), verkauft, was herausfällt, und kürzt zu große Positionen auf ein Viertel. Neues Geld (Einzahlungen) geht sofort in die 4 Aktien. Es gibt keine Stops; verkauft wird außerhalb der Rotation nur bei schweren SEC-Meldungen, sehr schlechten Nachrichten und beim Not-Aus. Im Protokoll steht jeden Monat eine Zeile `ROTATION JJJJ-MM`.
 
 ## Monatliche Einzahlung
 

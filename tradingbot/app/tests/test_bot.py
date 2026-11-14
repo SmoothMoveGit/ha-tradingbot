@@ -817,3 +817,61 @@ def test_momentum_rotation_picks_strongest_and_respects_market_filter():
     bars["SPY"] = series(lambda i: 100 * 0.999 ** i)  # Markt im Abwärtstrend -> bar
     r = run_momentum(bars, ["UP", "FLAT", "DOWN"], start, end, top_n=1, deposit=0)
     assert abs(r["return_pct"]) < 1e-9 and r["trades"] == 0
+
+
+def make_rotation_bot(budget=1000.0):
+    from tradingbot.config import PROFILES, _merge
+    syms = ("A", "B", "C", "D")
+    bot, broker = make_bot(syms, budget)
+    _merge(bot.cfg, PROFILES["momentum"])
+    st = bot.cfg.strategy
+    st.rotation_top_n, st.rotation_lookback, st.rotation_skip = 2, 30, 5
+    for k, s in enumerate(syms):  # A stärkste, D schwächste
+        for i in range(40):
+            broker.set_price(s, 100 * (1 + (0.01 - 0.005 * k)) ** i)
+    return bot, broker
+
+
+def test_rotation_buys_top_n_equal_weight_once_per_month():
+    bot, broker = make_rotation_bot()
+    bot.run_cycle(today=date(2026, 11, 16))
+    meta = bot.storage.all_meta()
+    assert set(meta) == {"A", "B"}
+    assert meta["A"] == pytest.approx(500, abs=1) and meta["B"] == pytest.approx(500, abs=1)
+    for i in range(40):  # D wird stärkste Aktie, A fällt
+        broker.set_price("D", broker.last_price("D") * 1.03)
+        broker.set_price("A", broker.last_price("A") * 0.995)
+    bot.run_cycle(today=date(2026, 11, 20))  # gleicher Monat: keine Umschichtung, keine Stops
+    assert set(bot.storage.all_meta()) == {"A", "B"}
+    bot.run_cycle(today=date(2026, 12, 1))
+    meta = bot.storage.all_meta()
+    assert "D" in meta and "A" not in meta
+    assert any("Rotation: nicht mehr unter den Top 2" in t[6] for t in bot.storage.recent_trades(10))
+    n = len(bot.storage.recent_trades(100))
+    bot.run_cycle(today=date(2026, 12, 2))  # danach Ruhe
+    assert len(bot.storage.recent_trades(100)) == n
+
+
+def test_rotation_invests_deposit_and_sells_on_sec_filing():
+    from tradingbot.sec import parse_atom
+    bot, broker = make_rotation_bot()
+    bot.run_cycle(today=date(2026, 11, 16))
+    n = len(bot.storage.recent_trades(100))
+    bot.cfg.risk.extra_deposits = 200
+    broker.cash += 200
+    bot.run_cycle(today=date(2026, 11, 17))
+    meta = bot.storage.all_meta()
+    assert meta["A"] == pytest.approx(600, abs=2) and meta["B"] == pytest.approx(600, abs=2)
+    assert len(bot.storage.recent_trades(100)) == n + 2
+
+    class FakeSec:
+        def fetch(self, symbols, since):
+            return [f | {"time": datetime.now(timezone.utc)} for f in parse_atom(SEC_FEED, "A")]
+
+    bot.news.sec = FakeSec()
+    bot.run_cycle(today=date.today())
+    assert "A" not in bot.storage.all_meta()
+    assert "SEC-Meldung" in bot.storage.recent_trades(1)[0][6]
+    bot.news.sec = None
+    bot.run_cycle(today=date.today())  # gesperrt: kein Rückkauf im selben Monat
+    assert "A" not in bot.storage.all_meta()
