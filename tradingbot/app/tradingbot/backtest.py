@@ -62,6 +62,7 @@ def run_backtest(cfg, bars: dict[str, list[Bar]], start: date | None = None, end
     bot_logger.setLevel(logging.CRITICAL)  # Not-Aus steht in der Zusammenfassung, nicht jeden Tag im Protokoll
     deposit = cfg.risk.monthly_deposit
     paid, units, peak, max_dd, month = budget, 0.0, 1.0, 0.0, None
+    peak_eq, max_dd_abs, bench_peak, bench_dd_abs = budget, 0.0, budget, 0.0
     try:
         for d in days:
             broker.set_date(d)
@@ -78,6 +79,11 @@ def run_backtest(cfg, bars: dict[str, list[Bar]], start: date | None = None, end
             ratio = broker.account().equity / paid
             peak = max(peak, ratio)
             max_dd = max(max_dd, 1 - ratio / peak)
+            eq = broker.account().equity
+            peak_eq, max_dd_abs = max(peak_eq, eq), max(max_dd_abs, max(peak_eq, eq) - eq)
+            if bench:
+                bv = units * broker.last_price(bench)
+                bench_peak, bench_dd_abs = max(bench_peak, bv), max(bench_dd_abs, max(bench_peak, bv) - bv)
     finally:
         bot_logger.setLevel(level)
 
@@ -86,7 +92,8 @@ def run_backtest(cfg, bars: dict[str, list[Bar]], start: date | None = None, end
     final = broker.account().equity
     return {
         "start": days[0], "end": days[-1], "budget": budget, "paid_in": paid, "final": final,
-        "return_pct": final / paid - 1, "max_drawdown_pct": max_dd,
+        "return_pct": final / paid - 1, "max_drawdown_pct": max_dd, "max_drawdown_abs": max_dd_abs,
+        "benchmark_drawdown_abs": bench_dd_abs if bench else None,
         "trades": len(trades), "sells": len(sells),
         "win_rate": sum(1 for t in sells if t[5] > 0) / len(sells) if sells else 0.0,
         "halted": bot.risk.halted,

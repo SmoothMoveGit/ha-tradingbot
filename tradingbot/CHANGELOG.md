@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.17
+- Startlog: neuer Block GROSSES KAPITAL rechnet das Profil momentum mit 23.000 $ (ca. 20.000 €) ohne Einzahlungen gegen URTH, inklusive größtem Rückgang in Dollar. Nur Rechnung, der Bot handelt unverändert.
+
 ## 0.8.16
 - Backtest-Varianten beim Start: bei Strategie momentum zeigt "aktuell" die Rotation, die übrigen Varianten rechnen wieder auf Basis aggressiv (vorher alle gleich).
 

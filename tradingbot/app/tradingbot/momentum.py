@@ -129,4 +129,31 @@ def compare_momentum(cfg, bars: dict[str, list[Bar]], start: date, cut: date, en
                      f"{r['trades']:3d} Tr.)")
     except Exception as e:
         lines.append(f"  Bot-Profil momentum: nicht berechenbar ({e})")
+    lines += large_capital(cfg, bars, start, cut, end, small)
+    return lines
+
+
+BIG_BUDGET = 23_000.0  # ca. 20.000 € (Kurs 1,15), ohne monatliche Einzahlung
+
+
+def large_capital(cfg, bars, start: date, cut: date, end: date, symbols: list[str],
+                  budget: float = BIG_BUDGET) -> list[str]:
+    """Bot-Profil momentum mit großem Startkapital, Ergebnis und größter Rückgang auch in Dollar."""
+    from .backtest import _merge, run_backtest
+    from .config import PROFILES
+    lines = [f"GROSSES KAPITAL (Bot-Profil momentum, Start {budget:,.0f} $, keine Einzahlungen, gegen "
+             f"{cfg.benchmark} mit gleichem Startbetrag)"]
+    try:
+        mcfg = _merge(copy.deepcopy(cfg), PROFILES["momentum"])
+        mcfg.watchlist = list(symbols)
+        mcfg.risk.start_budget, mcfg.risk.monthly_deposit, mcfg.risk.extra_deposits = budget, 0.0, 0.0
+        for name, a, b in (("3 J", start, end), ("A", start, cut), ("B", cut, end)):
+            r = run_backtest(mcfg, bars, a, b)
+            bench = (f" | {cfg.benchmark} {r['benchmark_final']:,.0f} $ ({r['benchmark_return_pct']:+.1%}, "
+                     f"größter Rückgang {r['benchmark_drawdown_abs']:,.0f} $)") if r.get("benchmark_final") else ""
+            lines.append(f"  {name:3} {r['start']}..{r['end']}: Bot {r['final']:,.0f} $ ({r['return_pct']:+.1%}, "
+                         f"größter Rückgang {r['max_drawdown_pct']:.0%} = {r['max_drawdown_abs']:,.0f} $, "
+                         f"{r['trades']} Tr.){bench}")
+    except Exception as e:
+        lines.append(f"  nicht berechenbar ({e})")
     return lines
