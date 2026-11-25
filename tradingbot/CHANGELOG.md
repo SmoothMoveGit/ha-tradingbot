@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.18
+- Daytrader-Vergleich beim Start mit 20.000 € (23.000 $) Startkapital, mit 1 € Gebühr je Order und mit doppelter Kursabweichung. Nur Backtest, der Live-Daytrader bleibt bei 1100 $ + Sonderzahlung.
+
 ## 0.8.17
 - Startlog: neuer Block GROSSES KAPITAL rechnet das Profil momentum mit 23.000 $ (ca. 20.000 €) ohne Einzahlungen gegen URTH, inklusive größtem Rückgang in Dollar. Nur Rechnung, der Bot handelt unverändert.
 

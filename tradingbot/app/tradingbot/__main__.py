@@ -134,9 +134,15 @@ def daytrade(cfg) -> int:
             log.info("DAYTRADER-DATEN %d von %d Werten mit Kursdaten", sum(1 for s in w60 if bars.get(s)), len(w60))
             base = {**LOOSE, "watchlist": w60, **exit_b}
             # 0.8.14: aktiv 60 Werte, zum Vergleich die 40 Werte bis 0.8.13 (wöchentlich prüfen)
+            # 0.8.18: Michi fragt, was der Daytrader mit 20.000 EUR (~23.000 $, Kurs 1,15) machen würde.
+            # Gebühr 1 EUR je Order (~1,15 $) wie bei Trade Republic, Alpaca selbst nimmt keine Ordergebühr.
+            big = {**base, "start_budget": 23000.0}
             variants = [
-                (f"aktiv: {len(w60)} Werte", base),
-                (f"{len(wider)} Werte (bis 0.8.13)", {**base, "watchlist": wider}),
+                (f"aktiv: {len(w60)} Werte, 1100 $", base),
+                ("20.000 EUR = 23.000 $", big),
+                ("23.000 $ mit 1 EUR Gebühr je Order", {**big, "sim_fee": 1.15}),
+                ("23.000 $ mit doppelter Kursabweichung (0,1 % je Seite)", {**big, "sim_slippage": 0.001}),
+                ("1100 $ mit 1 EUR Gebühr je Order", {**base, "sim_fee": 1.15}),
             ]
             for name, over in variants:
                 over = dict(over)

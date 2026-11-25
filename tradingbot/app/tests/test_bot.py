@@ -875,3 +875,17 @@ def test_rotation_invests_deposit_and_sells_on_sec_filing():
     bot.news.sec = None
     bot.run_cycle(today=date.today())  # gesperrt: kein Rückkauf im selben Monat
     assert "A" not in bot.storage.all_meta()
+
+
+def test_daytrader_sim_fee_in_pnl():
+    from datetime import datetime, timezone
+    from tradingbot.daytrader import IntradaySim
+    from tradingbot.broker.base import Bar
+    t = datetime(2026, 11, 2, 15, 0, tzinfo=timezone.utc)
+    sim = IntradaySim({"X": [Bar(t, 100, 100, 100, 100, 1000)]}, 1000.0, slippage=0.0, fee=1.0)
+    sim.idx["X"] = 1
+    buy = sim.buy_notional("X", 500.0)
+    sell = sim.sell_all("X")
+    pnl = (sell.price - buy.price) * buy.qty
+    assert abs(pnl - (-2.0)) < 1e-6
+    assert abs(sim.cash - 998.0) < 1e-6

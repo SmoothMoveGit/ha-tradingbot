@@ -74,6 +74,9 @@ class DayConfig:
     interval_minutes: int = 2
     min_order_value: float = 10.0
     earnings_guard_days: int = 1
+    # nur Backtest: Kursabweichung je Seite (halbe Spanne) und feste Gebühr je Order in USD
+    sim_slippage: float = 0.0005
+    sim_fee: float = 0.0
 
 
 # Zusätzliche, sehr liquide US-Werte: mehr Kandidaten heißt mehr Signale, ohne die Regeln aufzuweichen
@@ -574,10 +577,11 @@ class DayTrader:
 class IntradaySim:
     """Spielt historische 5-Minuten-Kerzen ab (für den Backtest). Ausführung zum Schlusskurs der Kerze."""
 
-    def __init__(self, bars: dict[str, list[Bar]], cash: float, slippage: float = 0.0005):
+    def __init__(self, bars: dict[str, list[Bar]], cash: float, slippage: float = 0.0005, fee: float = 0.0):
         self.bars = bars
         self.cash = cash
         self.slippage = slippage  # halbe Spanne zwischen Kauf- und Verkaufskurs
+        self.fee = fee            # feste Gebühr je Order (USD), steckt im Ausführungskurs
         self.holdings: dict[str, tuple[float, float]] = {}
         self.now = None
         self.idx = {s: 0 for s in bars}
@@ -621,7 +625,10 @@ class IntradaySim:
         if not self.idx.get(sym):
             return None
         price = self._price(sym) * (1 + self.slippage)
-        qty = amount / price
+        qty = max(amount - self.fee, 0.0) / price
+        if qty <= 0:
+            return None
+        price = amount / qty  # Gebühr anteilig im Kaufkurs, damit der Gewinn sie enthält
         self.cash -= amount
         self.holdings[sym] = (qty, price)
         return Fill(sym, "buy", qty, price)
@@ -630,7 +637,7 @@ class IntradaySim:
         if sym not in self.holdings:
             return None
         qty, _ = self.holdings.pop(sym)
-        price = self._price(sym) * (1 - self.slippage)
+        price = self._price(sym) * (1 - self.slippage) - self.fee / qty
         self.cash += qty * price
         return Fill(sym, "sell", qty, price)
 
@@ -660,7 +667,7 @@ def backtest(cfg: DayConfig, bars: dict[str, list[Bar]], test_days: int | None =
     zum Einlaufen der Indikatoren, wenn test_days gesetzt ist."""
     from dataclasses import replace
     cfg = replace(cfg, extra_deposit=0.0)  # Backtest immer mit dem Startbudget
-    sim = IntradaySim(bars, cfg.start_budget)
+    sim = IntradaySim(bars, cfg.start_budget, cfg.sim_slippage, cfg.sim_fee)
     bot = DayTrader(cfg, sim, Storage(":memory:"))
     bot.stats = {}
     bot.log = QUIET  # Backtest-Trades nicht ins Protokoll, sonst sehen sie echt aus
